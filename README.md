@@ -37,10 +37,10 @@
 - `schemas/acceptance-spec.schema.json`：标准输入 JSON Schema
 - `schemas/acceptance-result.schema.json`：标准结果 JSON Schema
 - `templates/acceptance-spec.example.yaml`：标准输入示例
-- `templates/playwright-critical.spec.ts`：浏览器执行示例
 - `templates/Makefile.example`：项目接入命令示例
 - `templates/ci-gate.yml`：CI 接入示例
 - `checklists/frontend-acceptance.md`：人工验收清单
+- `examples/demo/`：可本地启动的订单列表验收示例
 
 ## 最小接入方式
 
@@ -58,6 +58,10 @@
 ```bash
 npm install
 npm run build
-node dist/cli.js plan acceptance-spec.yaml
-node dist/cli.js run acceptance-spec.yaml --output artifacts --reuse
+npm run plan -- acceptance-spec.yaml
+npm run acceptance -- acceptance-spec.yaml --output artifacts --reuse
+
+# 仓库内 demo
+node examples/demo/server.mjs
+node dist/cli.js run examples/demo/acceptance-spec.yaml --output artifacts
 ```

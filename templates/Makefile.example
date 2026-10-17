@@ -1,17 +1,14 @@
-.PHONY: frontend contract e2e-critical check verify
+.PHONY: validate plan acceptance check
 
-frontend:
-	pnpm lint
-	pnpm typecheck
-	pnpm test -- --run
-	pnpm build
+validate:
+	npm run check
 
-contract:
-	./scripts/check-openapi.sh
+plan:
+	npm run plan -- acceptance-spec.yaml
 
-e2e-critical:
-	pnpm playwright test tests/e2e/critical
+acceptance:
+	npm run acceptance -- acceptance-spec.yaml --output artifacts --reuse
 
-check: frontend contract
+check: validate
 
-verify: check e2e-critical
+verify: check acceptance

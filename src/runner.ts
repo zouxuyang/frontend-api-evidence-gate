@@ -37,8 +37,8 @@ async function runScenario(browser: Browser, options: RunOptions, model: ModelAd
   const responses: ResponseEvidence[] = [];
   const checks: CheckResult[] = [];
   const started = new Map<string, number>();
-  page.on('request', (request) => { const id = `${request.method()}-${request.url()}-${Date.now()}`; started.set(request.url(), Date.now()); requests.push({ requestId: id, apiId: options.spec.apis?.find((api) => request.url().includes(api.path.replace(/:[^/]+/g, '')))?.id, startedAt: new Date().toISOString(), method: request.method(), url: request.url(), headers: redact(request.headers()), body: safeJson(request.postData()) }); });
-  page.on('response', async (response) => { const begin = started.get(response.url()) ?? Date.now(); const contentType = response.headers()['content-type']; let body: unknown; let rawBody: string | undefined; try { rawBody = await response.text(); body = contentType?.includes('json') ? JSON.parse(rawBody) : undefined; } catch { /* 保留 rawBody */ } responses.push({ requestId: requests.find((r) => r.url === response.url())?.requestId ?? response.url(), status: response.status(), durationMs: Date.now() - begin, headers: redact(response.headers()), contentType, body, rawBody: body === undefined ? rawBody : undefined }); });
+  page.on('request', (request) => { const id = `${request.method()}-${request.url()}-${Date.now()}`; started.set(request.url(), Date.now()); requests.push({ requestId: id, apiId: matchApiId(request.url(), request.method(), options.spec.apis ?? []), startedAt: new Date().toISOString(), method: request.method(), url: request.url(), headers: redact(request.headers()), body: safeJson(request.postData()) }); });
+  page.on('response', async (response) => { const begin = started.get(response.url()) ?? Date.now(); const contentType = response.headers()['content-type']; let body: unknown; let rawBody: string | undefined; try { rawBody = await response.text(); body = contentType?.includes('json') ? JSON.parse(rawBody) : undefined; } catch { /* 保留 rawBody */ } const request = requests.find((r) => r.url === response.url()); responses.push({ apiId: request?.apiId, url: response.url(), requestId: request?.requestId ?? response.url(), status: response.status(), durationMs: Date.now() - begin, headers: redact(response.headers()), contentType, body, rawBody: body === undefined ? rawBody : undefined }); });
   try {
     for (const step of scenario.steps) await executeStep(page, step, options.baseUrl ?? options.spec.project?.baseUrl ?? '', checks, requests, responses);
     const screenshot = path.join(artifactDir, 'screenshot.png'); await page.screenshot({ path: screenshot, fullPage: true });
@@ -59,21 +59,22 @@ async function runScenario(browser: Browser, options: RunOptions, model: ModelAd
 
 async function executeStep(page: Page, step: Record<string, unknown>, baseUrl: string, checks: CheckResult[], requests: RequestEvidence[], responses: ResponseEvidence[]) {
   if (typeof step.open === 'string') { await page.goto(new URL(step.open, baseUrl || 'http://localhost').toString()); return; }
-  if (step.click && typeof step.click === 'object') { await locator(page, step.click as Record<string, unknown>).click(); return; }
+  if (step.click && typeof step.click === 'object') { await (await locator(page, step.click as Record<string, unknown>)).click(); return; }
   if (step.fill && typeof step.fill === 'object') { const value = step.fill as Record<string, unknown>; await page.getByLabel(String(value.label)).fill(String(value.value)); return; }
   if (step.assertVisible && typeof step.assertVisible === 'object') { const target = await locator(page, step.assertVisible as Record<string, unknown>); const visible = await target.isVisible(); checks.push({ id: `assertVisible-${checks.length + 1}`, type: 'visibility', status: visible ? 'passed' : 'failed', actual: visible }); return; }
   if (step.assertRequest && typeof step.assertRequest === 'object') {
     const expected = step.assertRequest as Record<string, unknown>;
     const api = String(expected.api ?? '');
-    const actual = await waitFor(() => requests.find((request) => request.apiId === api || request.url.includes(api)), 2000);
-    const pass = Boolean(actual) && matchesRequest(actual!, expected);
+    const actual = await waitFor(() => [...requests].reverse().find((request) => (request.apiId === api || request.url.includes(api)) && matchesRequest(request, expected)), 2000);
+    const pass = Boolean(actual);
     checks.push({ id: `assertRequest-${checks.length + 1}`, type: 'api-contract', status: pass ? 'passed' : 'failed', expected, actual });
     return;
   }
   if (step.assertResponse && typeof step.assertResponse === 'object') {
     const expected = step.assertResponse as Record<string, unknown>;
-    const actual = await waitFor(() => responses[responses.length - 1], 2000);
-    const pass = Boolean(actual) && (expected.status === undefined || actual!.status === Number(expected.status));
+    const api = String(expected.api ?? '');
+    const actual = await waitFor(() => [...responses].reverse().find((response) => (response.apiId === api || response.url?.includes(api)) && (expected.status === undefined || response.status === Number(expected.status)) && matchesResponse(response, expected)), 2000);
+    const pass = Boolean(actual);
     checks.push({ id: `assertResponse-${checks.length + 1}`, type: 'api-response', status: pass ? 'passed' : 'failed', expected, actual });
     return;
   }
@@ -81,8 +82,11 @@ async function executeStep(page: Page, step: Record<string, unknown>, baseUrl: s
 }
 
 async function waitFor<T>(read: () => T | undefined, timeoutMs: number): Promise<T | undefined> { const deadline = Date.now() + timeoutMs; while (Date.now() < deadline) { const value = read(); if (value) return value; await new Promise((resolve) => setTimeout(resolve, 50)); } return read(); }
+function matchesResponse(actual: ResponseEvidence, expected: Record<string, unknown>) { if (!expected.query || typeof expected.query !== 'object') return true; const url = actual.url ?? actual.requestId; return Object.entries(expected.query as Record<string, unknown>).every(([key, value]) => url.includes(`${key}=${encodeURIComponent(String(value))}`)); }
 function matchesRequest(actual: RequestEvidence, expected: Record<string, unknown>) { const method = expected.method ? actual.method === String(expected.method).toUpperCase() : true; const query = expected.query && typeof expected.query === 'object' ? Object.entries(expected.query as Record<string, unknown>).every(([key, value]) => new URL(actual.url).searchParams.get(key) === String(value)) : true; const body = expected.body === undefined || JSON.stringify(actual.body) === JSON.stringify(expected.body); return method && query && body; }
-async function locator(page: Page, target: Record<string, unknown>) { if (target.role) return page.getByRole(String(target.role), target.name ? { name: String(target.name) } : undefined); if (target.text) return page.getByText(String(target.text)); if (target.label) return page.getByLabel(String(target.label)); throw new Error(`缺少可执行定位器：${JSON.stringify(target)}`); }
+function matchApiId(url: string, method: string, apis: Array<{ id: string; method: string; path: string }>) { const parsed = new URL(url); return apis.find((api) => api.method.toUpperCase() === method.toUpperCase() && pathMatches(parsed.pathname, api.path))?.id; }
+function pathMatches(actual: string, template: string) { const actualParts = actual.split('/').filter(Boolean); const templateParts = template.split('/').filter(Boolean); return actualParts.length === templateParts.length && templateParts.every((part, index) => part.startsWith(':') || part === actualParts[index]); }
+async function locator(page: Page, target: Record<string, unknown>) { if (target.role) return page.getByRole(String(target.role) as any, target.name ? { name: String(target.name) } : undefined); if (target.text) return page.getByText(String(target.text)); if (target.label) return page.getByLabel(String(target.label)); throw new Error(`缺少可执行定位器：${JSON.stringify(target)}`); }
 async function writeArtifacts(dir: string, result: AcceptanceResult) { await writeFile(path.join(dir, 'acceptance-result.json'), JSON.stringify(result, null, 2)); await writeFile(path.join(dir, 'checks.json'), JSON.stringify(result.checks, null, 2)); await writeFile(path.join(dir, 'requests.json'), JSON.stringify(result.requests, null, 2)); await writeFile(path.join(dir, 'responses.json'), JSON.stringify(result.responses, null, 2)); }
 async function updateLatest(outputDir: string, scenarioId: string, artifactDir: string) { const latest = path.join(outputDir, 'latest', scenarioId); await mkdir(latest, { recursive: true }); await cp(path.join(artifactDir, 'acceptance-result.json'), path.join(latest, 'acceptance-result.json')); }
 function safeJson(value: string | null): unknown { if (!value) return undefined; try { return JSON.parse(value); } catch { return value; } }

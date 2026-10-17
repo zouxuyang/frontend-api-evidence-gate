@@ -1,19 +1,15 @@
 # 将以下步骤映射到 GitHub Actions、Gitee CI 或其他 CI 平台。
-name: verify
+name: acceptance
 
 steps:
-  - name: frontend-quality
-    run: |
-      pnpm install --frozen-lockfile
-      pnpm lint
-      pnpm typecheck
-      pnpm test -- --run
-      pnpm build
+  - name: install
+    run: npm ci
 
-  - name: api-contract
-    run: ./scripts/check-openapi.sh
+  - name: typecheck
+    run: npm run check
 
-  - name: e2e-critical
-    run: pnpm playwright test tests/e2e/critical --reporter=html
+  - name: acceptance
+    run: npm run acceptance -- acceptance-spec.yaml --output artifacts --reuse
 
-# PR 设置中将以上检查设为 Required checks。
+# 将 typecheck 和 acceptance 设置为 Required checks。
+# 将 artifacts/ 作为 CI artifact 保存，供后续 Agent 读取。

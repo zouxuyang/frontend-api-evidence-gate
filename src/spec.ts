@@ -1,7 +1,8 @@
 import { readFile } from 'node:fs/promises';
 import path from 'node:path';
 import YAML from 'yaml';
-import Ajv from 'ajv';
+import * as AjvNamespace from 'ajv/dist/2020.js';
+const Ajv = (AjvNamespace as any).default ?? AjvNamespace;
 import type { AcceptanceSpec } from './types.js';
 
 export async function loadSpec(file: string): Promise<{ spec: AcceptanceSpec; normalized: string }> {
@@ -9,7 +10,7 @@ export async function loadSpec(file: string): Promise<{ spec: AcceptanceSpec; no
   const value = path.extname(file).toLowerCase() === '.json' ? JSON.parse(source) : YAML.parse(source);
   if (!value || typeof value !== 'object') throw new Error('验收规格必须是 YAML 或 JSON 对象');
   const spec = normalizeSpec(value as AcceptanceSpec);
-  const schema = JSON.parse(await readFile(new URL('../schemas/acceptance-spec.schema.json', import.meta.url), 'utf8'));
+  const schema = JSON.parse(await readSchema());
   const valid = new Ajv({ allErrors: true }).compile(schema)(spec);
   if (!valid) throw new Error(`验收规格校验失败：${JSON.stringify(valid.errors)}`);
   return { spec, normalized: stableStringify(spec) };
@@ -29,4 +30,9 @@ export function stableStringify(value: unknown): string {
   if (value === null || typeof value !== 'object') return JSON.stringify(value);
   if (Array.isArray(value)) return `[${value.map(stableStringify).join(',')}]`;
   return `{${Object.keys(value as Record<string, unknown>).sort().map((key) => `${JSON.stringify(key)}:${stableStringify((value as Record<string, unknown>)[key])}`).join(',')}}`;
+}
+
+async function readSchema(): Promise<string> {
+  try { return await readFile(new URL('../schemas/acceptance-spec.schema.json', import.meta.url), 'utf8'); }
+  catch { return await readFile(path.resolve(process.cwd(), 'schemas/acceptance-spec.schema.json'), 'utf8'); }
 }

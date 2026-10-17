@@ -43,7 +43,9 @@ export interface RequestEvidence {
 }
 
 export interface ResponseEvidence {
+  apiId?: string;
   requestId: string;
+  url?: string;
   status: number;
   durationMs: number;
   headers?: Record<string, string>;
