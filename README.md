@@ -1,42 +1,52 @@
-# 前端与 API 证据化验收门禁方案
+# AI 前端验收组件
 
-这是一套面向 AI 生成或修改页面的、框架无关的前端与 API 验收方案，目标是把“页面看起来能用”变成可重复、可审查、可阻止合入的证据链。
+这是一个独立的、框架无关的 AI 前端验收组件。上游 Agent 提供标准化的页面、API、交互和验收要求；组件根据规格驱动浏览器执行，调用模型进行语义复核，并输出可被后续 Agent 继续消费的标准化结果。
 
-## 方案解决的问题
+## 组件边界
 
-- 按钮或标签区域过窄导致换行、遮挡或不可点击；
-- 输入框可以填写，但数据没有正确进入实际请求；
-- 弹窗、抽屉、成功失败反馈行为不完整；
-- 列表没有真正分页，或分页参数不符合 API 约定；
-- 表格展示过多低价值字段；
-- 页面实现与 API 字段、枚举、分页结构不一致；
-- AI 报告“已完成”，但没有真实浏览器证据。
+组件只负责四件事：
 
-## 核心原则
+1. 接收并校验验收规格；
+2. 根据变更指纹选择需要执行或复用的场景；
+3. 通过真实浏览器采集页面、交互、请求和响应证据，并调用模型完成语义复核；
+4. 输出机器可读的验收结果和证据索引。
 
-验收以用户场景为单位，使用真实浏览器验证交互，使用 API schema 和请求断言核实数据契约，使用截图和布局规则检查视觉结果，并保存命令、日志、截图和 trace 作为过程证据。方案不绑定 Vue、React 或其他前端框架。
+组件不绑定 Vue、React 或其他前端框架，也不绑定某种后端语言或特定上游、下游 Agent。
+
+## 标准数据流
+
+```text
+上游 Agent
+  → acceptance-spec.yaml / normalized-spec.json
+  → 规格校验与规范化
+  → 依赖解析与场景指纹
+  → 执行或复用验收场景
+  → 浏览器规则检查 + 模型语义复核
+  → acceptance-result.json + 证据文件
+  → 后续 Agent 继续开发、修复或决定验收通过
+```
 
 ## 目录说明
 
-- `docs/01-总体方案.md`：完整流程和责任边界
-- `docs/02-门禁分层.md`：本地、PR、发布前和定期检查
-- `docs/03-前端与API检查矩阵.md`：框架无关的前端、API 和浏览器验收项
+- `docs/01-总体方案.md`：组件目标、边界和证据要求
+- `docs/02-门禁分层.md`：本地、PR、发布前检查分层
+- `docs/03-前端与API检查矩阵.md`：前端、API 和浏览器检查项
 - `docs/04-实施路线图.md`：分阶段落地计划
-- `docs/05-AI驱动验收组件方案.md`：规格驱动的验收执行器设计
-- `docs/06-变更判定与重验策略.md`：变更影响分析和证据复用规则
-- `templates/AGENTS.user.md`：用户级 Codex 规范模板
-- `templates/AGENTS.project.md`：项目级规范模板
-- `templates/Makefile.example`：统一验证命令示例
-- `templates/playwright-critical.spec.ts`：关键流程测试模板
-- `templates/ci-gate.yml`：CI 门禁示例
-- `templates/acceptance-spec.example.yaml`：验收规格示例
+- `docs/05-AI验收组件方案.md`：输入、处理、模型调用和输出协议
+- `docs/06-变更判定与重验策略.md`：指纹、依赖和全局组件重验规则
+- `schemas/acceptance-spec.schema.json`：标准输入 JSON Schema
+- `schemas/acceptance-result.schema.json`：标准结果 JSON Schema
+- `templates/acceptance-spec.example.yaml`：标准输入示例
+- `templates/playwright-critical.spec.ts`：浏览器执行示例
+- `templates/Makefile.example`：项目接入命令示例
+- `templates/ci-gate.yml`：CI 接入示例
 - `checklists/frontend-acceptance.md`：人工验收清单
 
-## 推荐落地顺序
+## 最小接入方式
 
-1. 将用户级规范合并到 `~/.codex/AGENTS.md`。
-2. 将项目级规范复制到前端或全栈仓库根目录的 `AGENTS.md`。
-3. 在仓库中提供 `make check`、`make e2e-critical` 和 `make verify`。
-4. 先覆盖登录、列表、搜索、分页、详情、编辑、保存这条主链路。
-5. 将 `frontend`、`contract`、`e2e-critical` 设置为 PR 必检项。
-6. 逐步加入视觉回归、无障碍和性能检查。
+1. 编写 `acceptance-spec.yaml`，声明页面、控件、交互、API、断言和质量要求；
+2. 将规格规范化为稳定 JSON，并校验 schema；
+3. 为页面和组件提供可解析的源码、依赖、API schema、测试数据和运行环境指纹；
+4. 执行验收组件；
+5. 将 `acceptance-result.json` 和证据目录交给后续 Agent；
+6. 后续 Agent 只根据 `pass`、`fail`、`blocked`、`needs_review` 及证据引用继续处理。

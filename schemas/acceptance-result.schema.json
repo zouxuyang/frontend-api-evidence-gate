@@ -1,71 +1,122 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://example.invalid/schemas/acceptance-result.schema.json",
   "title": "AcceptanceResult",
   "type": "object",
-  "required": [
-    "runId",
-    "specId",
-    "scenarioId",
-    "status",
-    "decision",
-    "evidence",
-    "checks"
-  ],
+  "required": ["runId", "specId", "scenarioId", "status", "decision", "fingerprint", "evidence", "checks"],
   "properties": {
-    "runId": {
-      "type": "string"
+    "runId": { "type": "string" },
+    "specId": { "type": "string" },
+    "specVersion": { "type": "integer", "minimum": 1 },
+    "scenarioId": { "type": "string" },
+    "status": { "enum": ["passed", "failed", "blocked", "reused", "skipped"] },
+    "decision": { "enum": ["pass", "fail", "needs_review"] },
+    "fingerprint": {
+      "type": "object",
+      "required": ["scenarioHash", "specHash"],
+      "properties": {
+        "scenarioHash": { "type": "string" },
+        "specHash": { "type": "string" },
+        "contentHash": { "type": "string" },
+        "semanticHash": { "type": "string" }
+      },
+      "additionalProperties": false
     },
-    "specId": {
-      "type": "string"
-    },
-    "specVersion": {
-      "type": "integer"
-    },
-    "scenarioId": {
-      "type": "string"
-    },
-    "status": {
-      "enum": [
-        "passed",
-        "failed",
-        "blocked",
-        "skipped"
-      ]
-    },
-    "decision": {
-      "enum": [
-        "pass",
-        "fail",
-        "needs_review"
-      ]
-    },
+    "reusedFrom": { "type": ["string", "null"] },
     "evidence": {
       "type": "object",
-      "required": [
-        "screenshot",
-        "requests",
-        "responses"
-      ],
+      "required": ["screenshot", "requests", "responses"],
       "properties": {
-        "screenshot": {
-          "type": "string"
-        },
-        "trace": {
-          "type": "string"
-        },
-        "requests": {
-          "type": "string"
-        },
-        "responses": {
-          "type": "string"
-        }
-      }
+        "screenshot": { "type": "string" },
+        "screenshots": { "type": "array", "items": { "type": "string" } },
+        "trace": { "type": "string" },
+        "checks": { "type": "string" },
+        "requests": { "type": "string" },
+        "responses": { "type": "string" }
+      },
+      "additionalProperties": false
+    },
+    "requests": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/request" }
+    },
+    "responses": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/response" }
     },
     "checks": {
-      "type": "array"
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["id", "type", "status"],
+        "properties": {
+          "id": { "type": "string" },
+          "type": { "type": "string" },
+          "status": { "enum": ["passed", "failed", "blocked", "skipped"] },
+          "expected": {},
+          "actual": {},
+          "message": { "type": "string" },
+          "evidenceRefs": { "type": "array", "items": { "type": "string" } }
+        },
+        "additionalProperties": false
+      }
     },
+    "findings": { "type": "array", "items": { "$ref": "#/$defs/finding" } },
     "aiReview": {
-      "type": "object"
+      "type": "object",
+      "required": ["status", "confidence", "evidenceRefs"],
+      "properties": {
+        "status": { "enum": ["passed", "failed", "needs_review", "blocked"] },
+        "confidence": { "type": "number", "minimum": 0, "maximum": 1 },
+        "findings": { "type": "array", "items": { "$ref": "#/$defs/finding" } },
+        "evidenceRefs": { "type": "array", "items": { "type": "string" } }
+      },
+      "additionalProperties": false
     }
-  }
+  },
+  "$defs": {
+    "request": {
+      "type": "object",
+      "required": ["requestId", "method", "url", "startedAt"],
+      "properties": {
+        "requestId": { "type": "string" },
+        "apiId": { "type": "string" },
+        "startedAt": { "type": "string" },
+        "durationMs": { "type": "number", "minimum": 0 },
+        "method": { "type": "string" },
+        "url": { "type": "string" },
+        "query": {},
+        "headers": { "type": "object" },
+        "body": {}
+      },
+      "additionalProperties": false
+    },
+    "response": {
+      "type": "object",
+      "required": ["requestId", "status", "durationMs"],
+      "properties": {
+        "requestId": { "type": "string" },
+        "status": { "type": "integer" },
+        "durationMs": { "type": "number", "minimum": 0 },
+        "headers": { "type": "object" },
+        "contentType": { "type": "string" },
+        "body": {},
+        "rawBody": { "type": "string" }
+      },
+      "additionalProperties": false
+    },
+    "finding": {
+      "type": "object",
+      "required": ["id", "severity", "message", "evidenceRefs"],
+      "properties": {
+        "id": { "type": "string" },
+        "severity": { "enum": ["critical", "high", "medium", "low", "info"] },
+        "message": { "type": "string" },
+        "confidence": { "type": "number", "minimum": 0, "maximum": 1 },
+        "evidenceRefs": { "type": "array", "items": { "type": "string" } }
+      },
+      "additionalProperties": false
+    }
+  },
+  "additionalProperties": false
 }

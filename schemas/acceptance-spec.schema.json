@@ -1,0 +1,19 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://example.invalid/schemas/acceptance-spec.schema.json",
+  "title": "AcceptanceSpec",
+  "type": "object",
+  "required": ["specId", "specVersion", "pages", "apis", "scenarios"],
+  "properties": {
+    "specId": { "type": "string" },
+    "specVersion": { "type": "integer", "minimum": 1 },
+    "project": { "type": "object" },
+    "pages": { "type": "array", "items": { "type": "object", "required": ["id", "route"] } },
+    "apis": { "type": "array", "items": { "type": "object", "required": ["id", "method", "path"] } },
+    "scenarios": { "type": "array", "items": { "type": "object", "required": ["id", "steps"] } },
+    "quality": { "type": "object" },
+    "data": { "type": "object" },
+    "components": { "type": "array", "items": { "type": "object", "required": ["id", "path", "impact"] } }
+  },
+  "additionalProperties": false
+}
