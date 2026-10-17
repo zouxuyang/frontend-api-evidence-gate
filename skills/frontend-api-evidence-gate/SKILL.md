@@ -17,14 +17,15 @@ Use this skill when a change needs browser and API evidence. The runner is an ex
 ## Workflow
 
 1. Inspect the project and locate an existing `acceptance-task.yaml` or `acceptance-spec.yaml`.
-2. Reuse it when it covers the requested change. Otherwise create a task in the project temporary/artifacts area with explicit pages, APIs, steps, and quality checks.
-3. Run the task:
+2. Reuse it when it covers the requested change. Otherwise create a task in the project temporary/artifacts area with explicit pages, APIs, steps, and quality checks. Keep the task scoped to the changed page/component/API; do not add unrelated full-site checks unless a shared component or runtime changed.
+3. Before running, perform a lightweight preflight: verify the frontend URL, the configured API base or health endpoint, and (when the scenario needs it) the authenticated tab/session. If a dependency is unavailable, record `blocked` with the concrete dependency and stop before interpreting page assertions.
+4. Run the task:
 
 ```bash
 acceptance-runner run acceptance-task.yaml --output artifacts/acceptance --reuse
 ```
 
-4. For an already open and logged-in Chromium or Edge tab, use the CDP endpoint and tab selector supplied by the user:
+5. For an already open and logged-in Chromium or Edge tab, use the CDP endpoint and tab selector supplied by the user:
 
 ```bash
 acceptance-runner run acceptance-task.yaml \
@@ -35,9 +36,26 @@ acceptance-runner run acceptance-task.yaml \
   --output artifacts/acceptance
 ```
 
-5. Read the returned decision and inspect `acceptance-result.json`, `checks.json`, `requests.json`, `responses.json`, `console.json`, screenshots, and `axe.json` when present.
-6. If the decision is `fail` or `needs_review`, use the evidence to make the smallest code fix, then run the affected task again. Do not report a pass when the runner returned a blocked or failed result.
-7. Report the decision and link the evidence files. Keep secrets and session cookies out of the task file and output.
+6. Read the returned decision and inspect `acceptance-result.json`, `checks.json`, `requests.json`, `responses.json`, `console.json`, screenshots, and `axe.json` when present.
+7. If the decision is `fail` or `needs_review`, classify the cause before changing code:
+   - `blocked`: environment, browser, authentication, or dependency unavailable;
+   - `fail`: deterministic assertion, layout, accessibility, request, or response mismatch;
+   - `needs_review`: evidence exists but requires human/semantic judgment.
+   A Playwright locator error caused by multiple matches is an acceptance-task defect first. Fix the locator or task and rerun before changing product code.
+8. If the decision is `fail` or `needs_review` for a product reason, use the evidence to make the smallest code fix, then run the affected task again. Do not report a pass when the runner returned a blocked or failed result.
+9. Report the decision and link the evidence files. Keep secrets and session cookies out of the task file and output.
+
+## Task authoring rules
+
+- Prefer stable selectors in this order: `testId`, unique `label`/`placeholder`, a scoped CSS selector, then an accessible role. A role/name selector is valid only when the expected match is unique.
+- When the same accessible name is intentionally used by a tab and its submit button, scope the action (`css: "#form-up button[type=submit]"`) or add a stable test id. Do not rely on `.first()` to hide an ambiguous contract.
+- For every mutating click, add a resulting assertion: visible success/error feedback, dialog state, or an API request/response assertion. A click alone is not evidence of completion.
+- Prefer `waitFor` before asserting content that is loaded asynchronously. Use a task timeout appropriate to the real API instead of assuming the default 5 seconds.
+- Declare only affected APIs in `apis`; include method, path template, relevant query/body fields, status, and a response schema when the contract matters. Avoid exact full-body equality when fields such as timestamps or generated IDs are nondeterministic.
+- When only a stable subset of a request or response body matters, set `bodyMatch: subset`; keep `exact` as the default for contracts that must match the complete body.
+- Use `quality.layoutOverflow: fail` for modal, tooltip, card, table, and responsive-layout changes; use `accessibility: axe` for shared components when the project can tolerate the extra runtime.
+- Use `--reuse` only when the scenario fingerprint includes the changed files/configuration and the same browser/auth/environment. After a product change, delete or invalidate stale `latest` results rather than treating reuse as a fresh pass.
+- Never place passwords, cookies, bearer tokens, database URLs, or real personal data in YAML, screenshots, request bodies, or committed artifacts. Use the runner's redaction and local bootstrap fixtures.
 
 ## TypeScript integration
 

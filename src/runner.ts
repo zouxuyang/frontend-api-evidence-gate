@@ -1,6 +1,6 @@
 import { cp, mkdir, writeFile } from 'node:fs/promises';
 import path from 'node:path';
-import { chromium, type Browser, type BrowserContext, type Page, type Request } from 'playwright';
+import { chromium, type Browser, type BrowserContext, type Locator, type Page, type Request } from 'playwright';
 import Ajv2020 from 'ajv/dist/2020.js';
 import AxeBuilder from '@axe-core/playwright';
 import type { AcceptanceResult, AcceptanceSpec, BrowserTarget, CheckResult, RequestEvidence, ResponseEvidence, ScenarioSpec, StepResult } from './types.js';
@@ -188,7 +188,7 @@ function attachNetworkEvidence(page: Page, spec: AcceptanceSpec, requests: Reque
   const onRequest = (request: Request) => {
     const id = `${request.method()}-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
     started.set(request, Date.now());
-    const evidence = { requestId: id, apiId: matchApiId(request.url(), request.method(), spec.apis ?? []), startedAt: new Date().toISOString(), method: request.method(), url: request.url(), headers: redact(request.headers()), body: redactSensitiveData ? redactValue(safeJson(request.postData())) : safeJson(request.postData()) };
+    const evidence = { requestId: id, apiId: matchApiId(request.url(), request.method(), spec.apis ?? []), startedAt: new Date().toISOString(), method: request.method(), url: redactUrl(request.url(), redactSensitiveData), headers: redact(request.headers()), body: redactSensitiveData ? redactValue(safeJson(request.postData())) : safeJson(request.postData()) };
     requestEvidence.set(request, evidence);
     requests.push(evidence);
   };
@@ -203,12 +203,13 @@ function attachNetworkEvidence(page: Page, spec: AcceptanceSpec, requests: Reque
         if (buffer.byteLength <= maxResponseBodyBytes) {
           rawBody = buffer.toString('utf8');
           body = contentType?.includes('json') ? JSON.parse(rawBody) : undefined;
+          if (redactSensitiveData && body === undefined) rawBody = '[REDACTED: non-JSON response body]';
         } else {
           rawBody = `[REDACTED: response body ${buffer.byteLength} bytes exceeds ${maxResponseBodyBytes} byte limit]`;
         }
       } catch { /* 保留 rawBody */ }
     }
-    responses.push({ apiId: request?.apiId, url: response.url(), requestId: request?.requestId ?? response.url(), status: response.status(), durationMs: Date.now() - begin, headers: redact(response.headers()), contentType, body: redactSensitiveData ? redactValue(body) : body, rawBody: body === undefined ? rawBody : undefined });
+    responses.push({ apiId: request?.apiId, url: redactUrl(response.url(), redactSensitiveData), requestId: request?.requestId ?? response.url(), status: response.status(), durationMs: Date.now() - begin, headers: redact(response.headers()), contentType, body: redactSensitiveData ? redactValue(body) : body, rawBody: body === undefined ? rawBody : undefined });
   };
   const onConsole = (message: import('playwright').ConsoleMessage) => { if (message.type() === 'error') consoleMessages.push({ type: 'console', text: message.text(), location: message.location() }); };
   const onPageError = (error: Error) => consoleMessages.push({ type: 'pageerror', message: error.message, stack: error.stack });
@@ -229,23 +230,23 @@ async function executeStep(page: Page, step: ExecutableStep, baseUrl: string, ch
   const target = step.target && typeof step.target === 'object' ? step.target as Record<string, unknown> : undefined;
   if (action === 'open' || typeof step.open === 'string') { await page.goto(new URL(String(step.open ?? step.path ?? step.url), baseUrl || 'http://localhost').toString()); return []; }
   if (action === 'attach') return [];
-  if (action === 'click' || (step.click && typeof step.click === 'object')) { await (await locator(page, target ?? step.click as Record<string, unknown>)).click(); return []; }
-  if (action === 'fill' || (step.fill && typeof step.fill === 'object')) { const value = (step.fill ?? step) as Record<string, unknown>; await (await locator(page, target ?? value)).fill(String(step.value ?? value.value ?? '')); return []; }
-  if (action === 'select') { await (await locator(page, target ?? {})).selectOption(String(step.value)); return []; }
-  if (action === 'upload') { await (await locator(page, target ?? {})).setInputFiles(String(step.file ?? step.value)); return []; }
-  if (action === 'press') { await (await locator(page, target ?? {})).press(String(step.key ?? 'Enter')); return []; }
+  if (action === 'click' || (step.click && typeof step.click === 'object')) { const targetSpec = target ?? step.click as Record<string, unknown>; await uniqueLocator(page, targetSpec, action).then((item) => item.click()); return []; }
+  if (action === 'fill' || (step.fill && typeof step.fill === 'object')) { const value = (step.fill ?? step) as Record<string, unknown>; const targetSpec = target ?? value; await uniqueLocator(page, targetSpec, action).then((item) => item.fill(String(step.value ?? value.value ?? ''))); return []; }
+  if (action === 'select') { await uniqueLocator(page, target ?? {}, action).then((item) => item.selectOption(String(step.value))); return []; }
+  if (action === 'upload') { await uniqueLocator(page, target ?? {}, action).then((item) => item.setInputFiles(String(step.file ?? step.value))); return []; }
+  if (action === 'press') { await uniqueLocator(page, target ?? {}, action).then((item) => item.press(String(step.key ?? 'Enter'))); return []; }
   if (action === 'waitFor') {
     if (target) await (await locator(page, target)).waitFor({ state: (step.state as 'attached' | 'detached' | 'visible' | 'hidden' | undefined) ?? 'visible', timeout: Number(step.timeoutMs ?? 5000) });
     else await sleepWithSignal(Number(step.timeoutMs ?? 250), signal);
     return [];
   }
   if (action === 'screenshot') return [await capture()];
-  if (action === 'assertVisible' || (step.assertVisible && typeof step.assertVisible === 'object')) { const expected = target ?? step.assertVisible as Record<string, unknown>; const actual = await (await locator(page, expected)).isVisible(); const wanted = typeof step.expected === 'boolean' ? step.expected : true; checks.push({ id: `assertVisible-${checks.length + 1}`, type: 'visibility', status: actual === wanted ? 'passed' : 'failed', expected: wanted, actual }); return []; }
-  if (action === 'assertText') { const actual = await (await locator(page, target ?? {})).innerText(); const expected = String(step.expected ?? step.text ?? ''); checks.push({ id: `assertText-${checks.length + 1}`, type: 'text', status: actual.includes(expected) ? 'passed' : 'failed', expected, actual }); return []; }
-  if (action === 'assertValue') { const actual = await (await locator(page, target ?? {})).inputValue(); const expected = String(step.expected ?? ''); checks.push({ id: `assertValue-${checks.length + 1}`, type: 'value', status: actual === expected ? 'passed' : 'failed', expected, actual }); return []; }
-  if (action === 'assertValidation') { const expected = step.expected as Record<string, unknown> ?? {}; const element = await locator(page, target ?? {}); const message = expected.message ? page.getByText(String(expected.message)).first() : element; const actual = await message.isVisible(); checks.push({ id: `assertValidation-${checks.length + 1}`, type: 'validation', status: actual === Boolean(expected.visible ?? true) ? 'passed' : 'failed', expected, actual }); return []; }
-  if (action === 'assertRequest' || (step.assertRequest && typeof step.assertRequest === 'object')) { const expected = (step.expected ?? step.assertRequest) as Record<string, unknown>; const api = String(step.api ?? expected.api ?? ''); const actual = await waitFor(() => [...requests].reverse().find((request) => (request.apiId === api || request.url.includes(api)) && matchesRequest(request, expected)), 2000, signal); checks.push({ id: `assertRequest-${checks.length + 1}`, type: 'api-contract', status: actual ? 'passed' : 'failed', expected, actual }); return []; }
-  if (action === 'assertResponse' || (step.assertResponse && typeof step.assertResponse === 'object')) { const expected = (step.expected ?? step.assertResponse) as Record<string, unknown>; const api = String(step.api ?? expected.api ?? ''); const actual = await waitFor(() => [...responses].reverse().find((response) => (response.apiId === api || response.url?.includes(api)) && matchesResponse(response, expected, requests)), 2000, signal); checks.push({ id: `assertResponse-${checks.length + 1}`, type: 'api-response', status: actual ? 'passed' : 'failed', expected, actual }); return []; }
+  if (action === 'assertVisible' || (step.assertVisible && typeof step.assertVisible === 'object')) { const expected = target ?? step.assertVisible as Record<string, unknown>; const wanted = typeof step.expected === 'boolean' ? step.expected : true; const actual = await waitForVisibility(page, expected, wanted, Number(step.timeoutMs ?? 5000)); checks.push({ id: `assertVisible-${checks.length + 1}`, type: 'visibility', status: actual === wanted ? 'passed' : 'failed', expected: wanted, actual }); return []; }
+  if (action === 'assertText') { const actual = await uniqueLocator(page, target ?? {}, action).then((item) => item.innerText()); const expected = String(step.expected ?? step.text ?? ''); checks.push({ id: `assertText-${checks.length + 1}`, type: 'text', status: actual.includes(expected) ? 'passed' : 'failed', expected, actual }); return []; }
+  if (action === 'assertValue') { const actual = await uniqueLocator(page, target ?? {}, action).then((item) => item.inputValue()); const expected = String(step.expected ?? ''); checks.push({ id: `assertValue-${checks.length + 1}`, type: 'value', status: actual === expected ? 'passed' : 'failed', expected, actual }); return []; }
+  if (action === 'assertValidation') { const expected = step.expected as Record<string, unknown> ?? {}; const element = target ? await locator(page, target) : undefined; const message = expected.message ? page.getByText(String(expected.message), { exact: true }).first() : element; if (!message) throw new Error('assertValidation 缺少 target 或 expected.message'); const actual = await waitForVisibilityLocator(message, Boolean(expected.visible ?? true), Number(step.timeoutMs ?? 5000)); checks.push({ id: `assertValidation-${checks.length + 1}`, type: 'validation', status: actual === Boolean(expected.visible ?? true) ? 'passed' : 'failed', expected, actual }); return []; }
+  if (action === 'assertRequest' || (step.assertRequest && typeof step.assertRequest === 'object')) { const expected = (step.expected ?? step.assertRequest) as Record<string, unknown>; const contract = step.bodyMatch ? { ...expected, bodyMatch: step.bodyMatch } : expected; const api = String(step.api ?? contract.api ?? ''); const actual = await waitFor(() => [...requests].reverse().find((request) => (request.apiId === api || request.url.includes(api)) && matchesRequest(request, contract)), 2000, signal); checks.push({ id: `assertRequest-${checks.length + 1}`, type: 'api-contract', status: actual ? 'passed' : 'failed', expected: contract, actual }); return []; }
+  if (action === 'assertResponse' || (step.assertResponse && typeof step.assertResponse === 'object')) { const expected = (step.expected ?? step.assertResponse) as Record<string, unknown>; const contract = step.bodyMatch ? { ...expected, bodyMatch: step.bodyMatch } : expected; const api = String(step.api ?? contract.api ?? ''); const actual = await waitFor(() => [...responses].reverse().find((response) => (response.apiId === api || response.url?.includes(api)) && matchesResponse(response, contract, requests)), 2000, signal); checks.push({ id: `assertResponse-${checks.length + 1}`, type: 'api-response', status: actual ? 'passed' : 'failed', expected: contract, actual }); return []; }
   throw new Error(`不支持的验收动作：${JSON.stringify(step)}`);
 }
 
@@ -262,12 +263,12 @@ async function sleepWithSignal(timeoutMs: number, signal?: AbortSignal) {
   });
   ensureActive(signal);
 }
-function matchesRequest(actual: RequestEvidence, expected: Record<string, unknown>) { const method = expected.method ? actual.method === String(expected.method).toUpperCase() : true; const query = expected.query && typeof expected.query === 'object' ? Object.entries(expected.query as Record<string, unknown>).every(([key, value]) => new URL(actual.url).searchParams.get(key) === String(value)) : true; const body = expected.body === undefined || JSON.stringify(actual.body) === JSON.stringify(expected.body); return method && query && body; }
+function matchesRequest(actual: RequestEvidence, expected: Record<string, unknown>) { const method = expected.method ? actual.method === String(expected.method).toUpperCase() : true; const query = matchesQuery(actual.url, expected.query); const body = expected.body === undefined || matchesPayload(actual.body, expected.body, expected.bodyMatch); return method && query && body; }
 function matchesResponse(actual: ResponseEvidence, expected: Record<string, unknown>, requests: RequestEvidence[]) {
   if (expected.status !== undefined && actual.status !== Number(expected.status)) return false;
   const request = requests.find((item) => item.requestId === actual.requestId);
-  const query = expected.query && request ? Object.entries(expected.query as Record<string, unknown>).every(([key, value]) => new URL(request.url).searchParams.get(key) === String(value)) : true;
-  const body = expected.body === undefined || JSON.stringify(actual.body) === JSON.stringify(expected.body);
+  const query = expected.query && request ? matchesQuery(request.url, expected.query) : true;
+  const body = expected.body === undefined || matchesPayload(actual.body, expected.body, expected.bodyMatch);
   if (!query || !body) return false;
   if (expected.schema) {
     if (actual.body === undefined) return false;
@@ -275,12 +276,81 @@ function matchesResponse(actual: ResponseEvidence, expected: Record<string, unkn
   }
   return true;
 }
+function matchesQuery(url: string, expected: unknown): boolean {
+  if (!expected || typeof expected !== 'object') return true;
+  const params = new URL(url).searchParams;
+  return Object.entries(expected as Record<string, unknown>).every(([key, value]) => {
+    const actual = params.getAll(key);
+    const wanted = Array.isArray(value) ? value.map(String) : [String(value)];
+    return actual.length === wanted.length && actual.every((item, index) => item === wanted[index]);
+  });
+}
+function matchesPayload(actual: unknown, expected: unknown, mode: unknown): boolean {
+  if (mode !== 'subset') return JSON.stringify(actual) === JSON.stringify(expected);
+  if (expected === null || typeof expected !== 'object') return actual === expected;
+  if (!actual || typeof actual !== 'object') return false;
+  if (Array.isArray(expected)) return Array.isArray(actual) && expected.every((item, index) => matchesPayload((actual as unknown[])[index], item, mode));
+  return Object.entries(expected as Record<string, unknown>).every(([key, value]) => matchesPayload((actual as Record<string, unknown>)[key], value, mode));
+}
 function matchApiId(url: string, method: string, apis: Array<{ id: string; method: string; path: string }>) { const parsed = new URL(url); return apis.find((api) => api.method.toUpperCase() === method.toUpperCase() && pathMatches(parsed.pathname, api.path))?.id; }
 function pathMatches(actual: string, template: string) { const actualParts = actual.split('/').filter(Boolean); const templateParts = template.split('/').filter(Boolean); return actualParts.length === templateParts.length && templateParts.every((part, index) => part.startsWith(':') || part === actualParts[index]); }
-async function locator(page: Page, target: Record<string, unknown>) { if (target.role) return page.getByRole(String(target.role) as any, target.name ? { name: String(target.name) } : undefined); if (target.testId) return page.getByTestId(String(target.testId)); if (target.placeholder) return page.getByPlaceholder(String(target.placeholder)); if (target.text) return page.getByText(String(target.text)); if (target.label) return page.getByLabel(String(target.label)); if (target.css) return page.locator(String(target.css)); throw new Error(`缺少可执行定位器：${JSON.stringify(target)}`); }
+async function locator(page: Page, target: Record<string, unknown>): Promise<Locator> {
+  const exact = typeof target.exact === 'boolean' ? target.exact : undefined;
+  let result: Locator;
+  if (target.role) result = page.getByRole(String(target.role) as any, { ...(target.name ? { name: String(target.name) } : {}), ...(exact === undefined ? {} : { exact }) });
+  else if (target.testId) result = page.getByTestId(String(target.testId));
+  else if (target.placeholder) result = page.getByPlaceholder(String(target.placeholder), exact === undefined ? undefined : { exact });
+  else if (target.text) result = page.getByText(String(target.text), exact === undefined ? undefined : { exact });
+  else if (target.label) result = page.getByLabel(String(target.label), exact === undefined ? undefined : { exact });
+  else if (target.css) result = page.locator(String(target.css));
+  else throw new Error(`缺少可执行定位器：${JSON.stringify(target)}`);
+  if (typeof target.nth === 'number') return result.nth(target.nth);
+  if (target.first === true) return result.first();
+  if (target.last === true) return result.last();
+  return result;
+}
+
+async function uniqueLocator(page: Page, target: Record<string, unknown>, action: string): Promise<Locator> {
+  const result = await locator(page, target);
+  const count = await result.count();
+  if (count !== 1) {
+    const hint = count > 1 ? '请增加 exact、nth、first/last 或作用域 CSS 定位。' : '请检查页面是否完成渲染或定位器是否正确。';
+    throw new Error(`验收定位器不唯一：action=${action}，匹配数量=${count}，target=${JSON.stringify(target)}。${hint}`);
+  }
+  return result;
+}
+
+async function waitForVisibility(page: Page, target: Record<string, unknown>, wanted: boolean, timeoutMs: number): Promise<boolean> {
+  const result = await locator(page, target);
+  return (await waitFor(() => visibility(result, wanted), timeoutMs)) ?? !wanted;
+}
+
+async function waitForVisibilityLocator(result: Locator, wanted: boolean, timeoutMs: number): Promise<boolean> {
+  return (await waitFor(() => visibility(result, wanted), timeoutMs)) ?? !wanted;
+}
+
+async function visibility(result: Locator, wanted: boolean): Promise<boolean | undefined> {
+  const count = await result.count();
+  if (count !== 1) {
+    if (count > 1) throw new Error(`验收断言定位器匹配 ${count} 个元素，请使用 exact、nth、first/last 或作用域 CSS 定位。`);
+    return wanted ? undefined : true;
+  }
+  const actual = await result.isVisible();
+  return actual === wanted ? actual : undefined;
+}
 async function writeArtifacts(dir: string, result: AcceptanceResult) { await writeFile(path.join(dir, 'acceptance-result.json'), JSON.stringify(result, null, 2)); await writeFile(path.join(dir, 'checks.json'), JSON.stringify(result.checks, null, 2)); await writeFile(path.join(dir, 'requests.json'), JSON.stringify(result.requests, null, 2)); await writeFile(path.join(dir, 'responses.json'), JSON.stringify(result.responses, null, 2)); }
 async function updateLatest(outputDir: string, scenarioId: string, artifactDir: string) { const latest = path.join(outputDir, 'latest', scenarioId); await mkdir(latest, { recursive: true }); await cp(path.join(artifactDir, 'acceptance-result.json'), path.join(latest, 'acceptance-result.json')); }
 function safeJson(value: string | null): unknown { if (!value) return undefined; try { return JSON.parse(value); } catch { return value; } }
+function redactUrl(raw: string, redactSensitiveData: boolean): string {
+  if (!redactSensitiveData) return raw;
+  try {
+    const url = new URL(raw);
+    for (const key of [...url.searchParams.keys()]) {
+      if (/authorization|cookie|password|passwd|token|secret|api[-_]?key|phone|mobile|id[-_]?card/i.test(key)) url.searchParams.set(key, '[REDACTED]');
+    }
+    return url.toString();
+  } catch { return raw; }
+}
 function redact(headers: Record<string, string>) { return Object.fromEntries(Object.entries(headers).map(([key, value]) => /authorization|cookie|token|secret/i.test(key) ? [key, '[REDACTED]'] : [key, value])); }
 function redactValue(value: unknown): unknown {
   if (Array.isArray(value)) return value.map(redactValue);

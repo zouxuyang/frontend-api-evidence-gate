@@ -168,6 +168,8 @@ checks.json             # expected / actual / status
 trace.zip               # Playwright 调试证据
 ```
 
+定位器应优先使用唯一的 `testId`、`label` 或作用域 CSS。角色和名称重复时，可在定位器中使用 `exact: true`、`nth`、`first` 或 `last`；执行器会在点击、输入和断言前报告多匹配原因。请求或响应只需核对稳定字段时，在断言步骤设置 `bodyMatch: subset`，默认仍为完整 body 精确匹配。
+
 结果结论为：
 
 - `pass`：规则和模型复核均通过；

@@ -179,7 +179,7 @@
                       ]
                     },
                     "target": {
-                      "type": "object"
+                      "$ref": "#/$defs/locator"
                     },
                     "api": {
                       "type": "string"
@@ -195,6 +195,12 @@
                     "timeoutMs": {
                       "type": "number",
                       "minimum": 0
+                    },
+                    "bodyMatch": {
+                      "enum": [
+                        "exact",
+                        "subset"
+                      ]
                     },
                     "state": {
                       "enum": [
@@ -292,5 +298,24 @@
       }
     }
   },
-  "additionalProperties": false
+  "additionalProperties": false,
+  "$defs": {
+    "locator": {
+      "type": "object",
+      "properties": {
+        "role": { "type": "string" },
+        "name": { "type": "string" },
+        "testId": { "type": "string" },
+        "placeholder": { "type": "string" },
+        "text": { "type": "string" },
+        "label": { "type": "string" },
+        "css": { "type": "string" },
+        "exact": { "type": "boolean" },
+        "nth": { "type": "integer", "minimum": 0 },
+        "first": { "type": "boolean" },
+        "last": { "type": "boolean" }
+      },
+      "additionalProperties": true
+    }
+  }
 }

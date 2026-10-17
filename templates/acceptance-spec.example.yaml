@@ -35,13 +35,14 @@ scenarios:
     priority: critical
     steps:
       - open: /users
-      - click: 编辑
-      - assertVisible: { role: dialog }
+      - click: { role: button, name: 编辑, exact: true }
+      - assertVisible: { role: dialog, exact: true }
       - fill: { label: 姓名, value: 张三 }
       - click: 保存
       - assertRequest:
           api: update-user
           body: { name: 张三 }
+          bodyMatch: subset
       - assertVisible: 保存成功
 
 quality:
