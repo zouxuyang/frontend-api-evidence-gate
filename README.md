@@ -65,3 +65,15 @@ npm run acceptance -- acceptance-spec.yaml --output artifacts --reuse
 node examples/demo/server.mjs
 node dist/cli.js run examples/demo/acceptance-spec.yaml --output artifacts
 ```
+
+
+## 示例页面
+
+`examples/demo/` 提供一个订单列表页面和本地 API，可直接验证搜索、编辑弹窗、PATCH 请求和成功反馈：
+
+```bash
+node examples/demo/server.mjs
+npm run build
+PLAYWRIGHT_BROWSERS_PATH=/Volumes/1T/codex-cache/frontend-api-evidence-gate/ms-playwright \
+  npm run acceptance -- examples/demo/acceptance-spec.yaml --output /Volumes/1T/codex-cache/frontend-api-evidence-gate/artifacts
+```
