@@ -50,3 +50,14 @@
 4. 执行验收组件；
 5. 将 `acceptance-result.json` 和证据目录交给后续 Agent；
 6. 后续 Agent 只根据 `pass`、`fail`、`blocked`、`needs_review` 及证据引用继续处理。
+
+## 运行时实现
+
+当前实现是 Node.js/TypeScript 包，提供 `acceptance-runner` CLI 和 `runAcceptance()` 库接口。Playwright 负责浏览器执行和证据采集，规则引擎负责确定性断言，模型通过 `ModelAdapter` 接口接入。默认的 `NoopModelAdapter` 只用于本地开发，生产环境应注入实际模型适配器。
+
+```bash
+npm install
+npm run build
+node dist/cli.js plan acceptance-spec.yaml
+node dist/cli.js run acceptance-spec.yaml --output artifacts --reuse
+```

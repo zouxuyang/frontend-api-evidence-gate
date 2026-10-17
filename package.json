@@ -1,0 +1,30 @@
+{
+  "name": "@frontend-api-evidence-gate/runner",
+  "version": "0.1.0",
+  "description": "Framework-agnostic AI frontend acceptance runner with browser and API evidence.",
+  "type": "module",
+  "bin": {
+    "acceptance-runner": "./dist/cli.js"
+  },
+  "exports": {
+    ".": "./dist/index.js"
+  },
+  "files": ["dist", "schemas"],
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "check": "tsc -p tsconfig.json --noEmit",
+    "test": "node --test test/**/*.test.js"
+  },
+  "dependencies": {
+    "ajv": "^8.17.1",
+    "playwright": "^1.52.0",
+    "yaml": "^2.7.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.13.0",
+    "typescript": "^5.7.3"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}
