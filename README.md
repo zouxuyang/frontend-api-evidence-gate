@@ -58,6 +58,25 @@ PLAYWRIGHT_BROWSERS_PATH=/Volumes/1T/codex-cache/frontend-api-evidence-gate/ms-p
 
 通过版会验证搜索、编辑弹窗、PATCH 请求、响应和“保存成功”提示，结果为 `pass`。
 
+目标模式和运行保护：
+
+```bash
+acceptance-runner run acceptance-task.json \
+  --target existing \
+  --cdp-endpoint http://127.0.0.1:9222 \
+  --tab-url https://test.example.com/orders \
+  --timeout 30000 \
+  --max-response-bytes 1048576
+```
+
+外部 Agent 也可以启动本地入口：
+
+```bash
+acceptance-runner-server --port 3777
+```
+
+HTTP 使用 `POST /run`；传入 `async: true` 后，可通过 `GET /jobs/:jobId` 查询，并用 `POST /jobs/:jobId/cancel` 取消。MCP 使用 `POST /mcp` 的 `tools/list` 和 `tools/call`。
+
 ## 演示：验收一个有问题的页面
 
 [examples/demo/README.md](examples/demo/README.md) 展示了完整的失败案例。问题页面故意：

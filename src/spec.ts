@@ -10,10 +10,15 @@ export async function loadSpec(file: string): Promise<{ spec: AcceptanceSpec; no
   const value = path.extname(file).toLowerCase() === '.json' ? JSON.parse(source) : YAML.parse(source);
   if (!value || typeof value !== 'object') throw new Error('验收规格必须是 YAML 或 JSON 对象');
   const spec = normalizeSpec(value as AcceptanceSpec);
-  const schema = JSON.parse(await readSchema('taskId' in (spec as Record<string, unknown>) ? 'acceptance-task.schema.json' : 'acceptance-spec.schema.json'));
-  const validate = new Ajv({ allErrors: true }).compile(schema);
-  if (!validate(spec)) throw new Error(`验收规格校验失败：${JSON.stringify(validate.errors)}`);
+  await validateSpec(spec);
   return { spec, normalized: stableStringify(spec) };
+}
+
+export async function validateSpec(spec: AcceptanceSpec): Promise<void> {
+  const schemaName = 'taskId' in (spec as Record<string, unknown>) ? 'acceptance-task.schema.json' : 'acceptance-spec.schema.json';
+  const source = await readSchema(schemaName);
+  const validate = new Ajv({ allErrors: true }).compile(JSON.parse(source));
+  if (!validate(spec)) throw new Error(`验收规格校验失败：${JSON.stringify(validate.errors)}`);
 }
 
 export function normalizeSpec(input: AcceptanceSpec): AcceptanceSpec {

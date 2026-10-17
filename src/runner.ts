@@ -16,6 +16,9 @@ export interface RunOptions {
   model?: ModelAdapter;
   reuse?: boolean;
   screenshotMode?: 'final' | 'each-step';
+  signal?: AbortSignal;
+  timeoutMs?: number;
+  maxResponseBodyBytes?: number;
 }
 
 export async function runAcceptance(options: RunOptions): Promise<AcceptanceResult[]> {
@@ -34,18 +37,28 @@ export async function runAcceptance(options: RunOptions): Promise<AcceptanceResu
     await writeRunSummary(options.outputDir, runId, options.spec, results);
     return results;
   }
+  const controller = new AbortController();
+  const abortFromCaller = () => controller.abort(options.signal?.reason ?? new Error('验收任务已取消'));
+  options.signal?.addEventListener('abort', abortFromCaller, { once: true });
+  if (options.signal?.aborted) abortFromCaller();
+  const timeout = options.timeoutMs && options.timeoutMs > 0 ? setTimeout(() => controller.abort(new Error(`验收任务超时：${options.timeoutMs}ms`)), options.timeoutMs) : undefined;
+  const runOptions = { ...options, signal: controller.signal };
   let browser: Browser;
   try { browser = await connectBrowser(target, options.browser); }
   catch (error) {
     for (const item of pending) results.push(await writeBlockedResult(options, item.scenario, item.hashes, runId, item.artifactDir, error));
+    options.signal?.removeEventListener('abort', abortFromCaller);
+    if (timeout) clearTimeout(timeout);
     await writeRunSummary(options.outputDir, runId, options.spec, results);
     return results;
   }
   try {
-    for (const item of pending) results.push(await runScenario(browser, options, item.scenario, item.hashes, runId, item.artifactDir, target));
+    for (const item of pending) results.push(await runScenario(browser, runOptions, item.scenario, item.hashes, runId, item.artifactDir, target));
   } finally {
     await browser.close();
   }
+  options.signal?.removeEventListener('abort', abortFromCaller);
+  if (timeout) clearTimeout(timeout);
   await writeRunSummary(options.outputDir, runId, options.spec, results);
   return results;
 }
@@ -76,13 +89,14 @@ async function runScenario(browser: Browser, options: RunOptions, scenario: Scen
     tracingContext = page.context();
     const traceEnabled = options.spec.quality?.trace !== false;
     if (traceEnabled) await tracingContext.tracing.start({ screenshots: true, snapshots: true });
-    detachNetwork = attachNetworkEvidence(page, options.spec, requests, responses, consoleMessages, options.spec.quality?.redactSensitiveData !== false);
+    detachNetwork = attachNetworkEvidence(page, options.spec, requests, responses, consoleMessages, options.spec.quality?.redactSensitiveData !== false, options.maxResponseBodyBytes ?? 1024 * 1024);
     if (shouldCaptureEachStep(options)) await page.screenshot({ path: path.join(artifactDir, 'screenshots', '000-before.png'), fullPage: true });
     for (const rawStep of scenario.steps) {
+      ensureActive(options.signal);
       const step = normalizeStep(rawStep, steps.length + 1);
       const beforeChecks = checks.length;
       try {
-        const explicitEvidence = await executeStep(page, step, options.baseUrl ?? options.spec.project?.baseUrl ?? '', checks, requests, responses, () => captureStepScreenshot(page!, artifactDir, steps.length + 1));
+        const explicitEvidence = await executeStep(page, step, options.baseUrl ?? options.spec.project?.baseUrl ?? '', checks, requests, responses, () => captureStepScreenshot(page!, artifactDir, steps.length + 1), options.signal);
         const screenshot = shouldCaptureEachStep(options) ? await captureStepScreenshot(page, artifactDir, steps.length + 1) : undefined;
         steps.push({ stepId: step.id, action: step.action, status: checks.slice(beforeChecks).some((check) => check.status === 'failed') ? 'failed' : 'passed', evidenceRefs: [...explicitEvidence, ...(screenshot ? [screenshot] : [])] });
       } catch (error) {
@@ -141,7 +155,7 @@ async function selectPage(browser: Browser, target: BrowserTarget): Promise<Page
   return page;
 }
 
-function attachNetworkEvidence(page: Page, spec: AcceptanceSpec, requests: RequestEvidence[], responses: ResponseEvidence[], consoleMessages: Array<Record<string, unknown>>, redactSensitiveData: boolean) {
+function attachNetworkEvidence(page: Page, spec: AcceptanceSpec, requests: RequestEvidence[], responses: ResponseEvidence[], consoleMessages: Array<Record<string, unknown>>, redactSensitiveData: boolean, maxResponseBodyBytes: number) {
   const started = new Map<Request, number>();
   const requestEvidence = new Map<Request, RequestEvidence>();
   const onRequest = (request: Request) => {
@@ -157,7 +171,15 @@ function attachNetworkEvidence(page: Page, spec: AcceptanceSpec, requests: Reque
     const contentType = response.headers()['content-type'];
     let body: unknown; let rawBody: string | undefined;
     if (request?.apiId) {
-      try { rawBody = await response.text(); body = contentType?.includes('json') ? JSON.parse(rawBody) : undefined; } catch { /* 保留 rawBody */ }
+      try {
+        const buffer = await response.body();
+        if (buffer.byteLength <= maxResponseBodyBytes) {
+          rawBody = buffer.toString('utf8');
+          body = contentType?.includes('json') ? JSON.parse(rawBody) : undefined;
+        } else {
+          rawBody = `[REDACTED: response body ${buffer.byteLength} bytes exceeds ${maxResponseBodyBytes} byte limit]`;
+        }
+      } catch { /* 保留 rawBody */ }
     }
     responses.push({ apiId: request?.apiId, url: response.url(), requestId: request?.requestId ?? response.url(), status: response.status(), durationMs: Date.now() - begin, headers: redact(response.headers()), contentType, body: redactSensitiveData ? redactValue(body) : body, rawBody: body === undefined ? rawBody : undefined });
   };
@@ -174,7 +196,8 @@ function normalizeStep(raw: Record<string, unknown>, index: number): ExecutableS
   return { ...raw, id: `step-${index}`, action: legacy ?? '' };
 }
 
-async function executeStep(page: Page, step: ExecutableStep, baseUrl: string, checks: CheckResult[], requests: RequestEvidence[], responses: ResponseEvidence[], capture: () => Promise<string>): Promise<string[]> {
+async function executeStep(page: Page, step: ExecutableStep, baseUrl: string, checks: CheckResult[], requests: RequestEvidence[], responses: ResponseEvidence[], capture: () => Promise<string>, signal?: AbortSignal): Promise<string[]> {
+  ensureActive(signal);
   const action = step.action;
   const target = step.target && typeof step.target === 'object' ? step.target as Record<string, unknown> : undefined;
   if (action === 'open' || typeof step.open === 'string') { await page.goto(new URL(String(step.open ?? step.path ?? step.url), baseUrl || 'http://localhost').toString()); return []; }
@@ -186,7 +209,7 @@ async function executeStep(page: Page, step: ExecutableStep, baseUrl: string, ch
   if (action === 'press') { await (await locator(page, target ?? {})).press(String(step.key ?? 'Enter')); return []; }
   if (action === 'waitFor') {
     if (target) await (await locator(page, target)).waitFor({ state: (step.state as 'attached' | 'detached' | 'visible' | 'hidden' | undefined) ?? 'visible', timeout: Number(step.timeoutMs ?? 5000) });
-    else await page.waitForTimeout(Number(step.timeoutMs ?? 250));
+    else await sleepWithSignal(Number(step.timeoutMs ?? 250), signal);
     return [];
   }
   if (action === 'screenshot') return [await capture()];
@@ -194,14 +217,24 @@ async function executeStep(page: Page, step: ExecutableStep, baseUrl: string, ch
   if (action === 'assertText') { const actual = await (await locator(page, target ?? {})).innerText(); const expected = String(step.expected ?? step.text ?? ''); checks.push({ id: `assertText-${checks.length + 1}`, type: 'text', status: actual.includes(expected) ? 'passed' : 'failed', expected, actual }); return []; }
   if (action === 'assertValue') { const actual = await (await locator(page, target ?? {})).inputValue(); const expected = String(step.expected ?? ''); checks.push({ id: `assertValue-${checks.length + 1}`, type: 'value', status: actual === expected ? 'passed' : 'failed', expected, actual }); return []; }
   if (action === 'assertValidation') { const expected = step.expected as Record<string, unknown> ?? {}; const element = await locator(page, target ?? {}); const message = expected.message ? page.getByText(String(expected.message)).first() : element; const actual = await message.isVisible(); checks.push({ id: `assertValidation-${checks.length + 1}`, type: 'validation', status: actual === Boolean(expected.visible ?? true) ? 'passed' : 'failed', expected, actual }); return []; }
-  if (action === 'assertRequest' || (step.assertRequest && typeof step.assertRequest === 'object')) { const expected = (step.expected ?? step.assertRequest) as Record<string, unknown>; const api = String(step.api ?? expected.api ?? ''); const actual = await waitFor(() => [...requests].reverse().find((request) => (request.apiId === api || request.url.includes(api)) && matchesRequest(request, expected)), 2000); checks.push({ id: `assertRequest-${checks.length + 1}`, type: 'api-contract', status: actual ? 'passed' : 'failed', expected, actual }); return []; }
-  if (action === 'assertResponse' || (step.assertResponse && typeof step.assertResponse === 'object')) { const expected = (step.expected ?? step.assertResponse) as Record<string, unknown>; const api = String(step.api ?? expected.api ?? ''); const actual = await waitFor(() => [...responses].reverse().find((response) => (response.apiId === api || response.url?.includes(api)) && matchesResponse(response, expected, requests)), 2000); checks.push({ id: `assertResponse-${checks.length + 1}`, type: 'api-response', status: actual ? 'passed' : 'failed', expected, actual }); return []; }
+  if (action === 'assertRequest' || (step.assertRequest && typeof step.assertRequest === 'object')) { const expected = (step.expected ?? step.assertRequest) as Record<string, unknown>; const api = String(step.api ?? expected.api ?? ''); const actual = await waitFor(() => [...requests].reverse().find((request) => (request.apiId === api || request.url.includes(api)) && matchesRequest(request, expected)), 2000, signal); checks.push({ id: `assertRequest-${checks.length + 1}`, type: 'api-contract', status: actual ? 'passed' : 'failed', expected, actual }); return []; }
+  if (action === 'assertResponse' || (step.assertResponse && typeof step.assertResponse === 'object')) { const expected = (step.expected ?? step.assertResponse) as Record<string, unknown>; const api = String(step.api ?? expected.api ?? ''); const actual = await waitFor(() => [...responses].reverse().find((response) => (response.apiId === api || response.url?.includes(api)) && matchesResponse(response, expected, requests)), 2000, signal); checks.push({ id: `assertResponse-${checks.length + 1}`, type: 'api-response', status: actual ? 'passed' : 'failed', expected, actual }); return []; }
   throw new Error(`不支持的验收动作：${JSON.stringify(step)}`);
 }
 
 async function captureStepScreenshot(page: Page, artifactDir: string, index: number): Promise<string> { const relative = path.join('screenshots', `${String(index).padStart(3, '0')}-step.png`); await page.screenshot({ path: path.join(artifactDir, relative), fullPage: true }); return relative; }
 function shouldCaptureEachStep(options: RunOptions) { return options.screenshotMode === 'each-step' || options.spec.quality?.screenshot === 'each-step'; }
-async function waitFor<T>(read: () => T | undefined, timeoutMs: number): Promise<T | undefined> { const deadline = Date.now() + timeoutMs; while (Date.now() < deadline) { const value = read(); if (value) return value; await new Promise((resolve) => setTimeout(resolve, 50)); } return read(); }
+async function waitFor<T>(read: () => T | undefined, timeoutMs: number, signal?: AbortSignal): Promise<T | undefined> { const deadline = Date.now() + timeoutMs; while (Date.now() < deadline) { ensureActive(signal); const value = read(); if (value) return value; await new Promise((resolve) => setTimeout(resolve, 50)); } ensureActive(signal); return read(); }
+function ensureActive(signal?: AbortSignal) { if (signal?.aborted) throw signal.reason instanceof Error ? signal.reason : new Error('验收任务已取消'); }
+async function sleepWithSignal(timeoutMs: number, signal?: AbortSignal) {
+  ensureActive(signal);
+  await new Promise<void>((resolve, reject) => {
+    const timer = setTimeout(() => { signal?.removeEventListener('abort', onAbort); resolve(); }, timeoutMs);
+    const onAbort = () => { clearTimeout(timer); signal?.removeEventListener('abort', onAbort); reject(signal?.reason instanceof Error ? signal.reason : new Error('验收任务已取消')); };
+    signal?.addEventListener('abort', onAbort, { once: true });
+  });
+  ensureActive(signal);
+}
 function matchesRequest(actual: RequestEvidence, expected: Record<string, unknown>) { const method = expected.method ? actual.method === String(expected.method).toUpperCase() : true; const query = expected.query && typeof expected.query === 'object' ? Object.entries(expected.query as Record<string, unknown>).every(([key, value]) => new URL(actual.url).searchParams.get(key) === String(value)) : true; const body = expected.body === undefined || JSON.stringify(actual.body) === JSON.stringify(expected.body); return method && query && body; }
 function matchesResponse(actual: ResponseEvidence, expected: Record<string, unknown>, requests: RequestEvidence[]) {
   if (expected.status !== undefined && actual.status !== Number(expected.status)) return false;
@@ -209,7 +242,8 @@ function matchesResponse(actual: ResponseEvidence, expected: Record<string, unkn
   const query = expected.query && request ? Object.entries(expected.query as Record<string, unknown>).every(([key, value]) => new URL(request.url).searchParams.get(key) === String(value)) : true;
   const body = expected.body === undefined || JSON.stringify(actual.body) === JSON.stringify(expected.body);
   if (!query || !body) return false;
-  if (expected.schema && actual.body !== undefined) {
+  if (expected.schema) {
+    if (actual.body === undefined) return false;
     try { if (!new Ajv2020.default({ allErrors: true }).compile(expected.schema)(actual.body)) return false; } catch { return false; }
   }
   return true;
