@@ -39,7 +39,6 @@
 - `templates/acceptance-spec.example.yaml`：标准输入示例
 - `templates/Makefile.example`：项目接入命令示例
 - `templates/ci-gate.yml`：CI 接入示例
-- `checklists/frontend-acceptance.md`：人工验收清单
 - `examples/demo/`：可本地启动的订单列表验收示例
 
 ## 最小接入方式
