@@ -102,6 +102,9 @@
         },
         "responses": {
           "type": "string"
+        },
+        "console": {
+          "type": "string"
         }
       },
       "additionalProperties": false

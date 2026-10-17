@@ -8,7 +8,7 @@ export interface AcceptanceSpec {
   taskVersion?: number;
   browser?: BrowserTarget;
   project?: { baseUrl?: string; [key: string]: unknown };
-  pages?: Array<{ id: string; route: string; [key: string]: unknown }>;
+  pages?: Array<{ id: string; route?: string; path?: string; [key: string]: unknown }>;
   apis?: Array<{ id: string; method: string; path: string; [key: string]: unknown }>;
   scenarios: ScenarioSpec[];
   quality?: Record<string, unknown>;
@@ -95,7 +95,7 @@ export interface AcceptanceResult {
   decision: AcceptanceDecision;
   fingerprint: { scenarioHash: string; specHash: string; contentHash?: string; semanticHash?: string };
   reusedFrom: string | null;
-  evidence: { screenshot: string; screenshots?: string[]; trace?: string; checks: string; requests: string; responses: string };
+  evidence: { screenshot: string; screenshots?: string[]; trace?: string; checks: string; requests: string; responses: string; console?: string };
   requests: RequestEvidence[];
   responses: ResponseEvidence[];
   checks: CheckResult[];

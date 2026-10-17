@@ -3,55 +3,280 @@
   "$id": "https://example.invalid/schemas/acceptance-spec.schema.json",
   "title": "AcceptanceSpec",
   "type": "object",
-  "required": ["specId", "specVersion", "pages", "apis", "scenarios"],
+  "required": [
+    "specId",
+    "specVersion",
+    "pages",
+    "apis",
+    "scenarios"
+  ],
   "properties": {
-    "specId": { "type": "string" },
-    "specVersion": { "type": "integer", "minimum": 1 },
-    "taskId": { "type": "string" },
-    "taskVersion": { "type": "integer", "minimum": 1 },
+    "specId": {
+      "type": "string"
+    },
+    "specVersion": {
+      "type": "integer",
+      "minimum": 1
+    },
+    "taskId": {
+      "type": "string"
+    },
+    "taskVersion": {
+      "type": "integer",
+      "minimum": 1
+    },
     "browser": {
       "type": "object",
       "properties": {
-        "mode": { "enum": ["launch", "existing"] },
-        "browser": { "enum": ["chromium", "firefox", "webkit"] },
-        "headless": { "type": "boolean" },
+        "mode": {
+          "enum": [
+            "launch",
+            "existing"
+          ]
+        },
+        "browser": {
+          "enum": [
+            "chromium",
+            "firefox",
+            "webkit"
+          ]
+        },
+        "headless": {
+          "type": "boolean"
+        },
         "connection": {
           "type": "object",
-          "required": ["type", "endpoint"],
+          "required": [
+            "type",
+            "endpoint"
+          ],
           "properties": {
-            "type": { "const": "cdp" },
-            "endpoint": { "type": "string", "minLength": 1 }
+            "type": {
+              "const": "cdp"
+            },
+            "endpoint": {
+              "type": "string",
+              "minLength": 1
+            }
           },
           "additionalProperties": false
         },
         "target": {
           "type": "object",
           "properties": {
-            "url": { "type": "string" },
-            "tabTitle": { "type": "string" },
-            "index": { "type": "integer", "minimum": 0 }
+            "url": {
+              "type": "string"
+            },
+            "tabTitle": {
+              "type": "string"
+            },
+            "index": {
+              "type": "integer",
+              "minimum": 0
+            }
           },
           "additionalProperties": false
         }
       },
       "additionalProperties": false
     },
-    "project": { "type": "object" },
-    "pages": { "type": "array", "items": { "type": "object", "required": ["id", "route"] } },
-    "apis": { "type": "array", "items": { "type": "object", "required": ["id", "method", "path"] } },
-    "scenarios": { "type": "array", "items": { "type": "object", "required": ["id", "steps"] } },
+    "project": {
+      "type": "object"
+    },
+    "pages": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "id"
+        ],
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "route": {
+            "type": "string"
+          },
+          "path": {
+            "type": "string"
+          }
+        },
+        "oneOf": [
+          {
+            "required": [
+              "route"
+            ]
+          },
+          {
+            "required": [
+              "path"
+            ]
+          }
+        ],
+        "additionalProperties": true
+      }
+    },
+    "apis": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "id",
+          "method",
+          "path"
+        ]
+      }
+    },
+    "scenarios": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "id",
+          "steps"
+        ],
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "page": {
+            "type": "string"
+          },
+          "priority": {
+            "type": "string"
+          },
+          "steps": {
+            "type": "array",
+            "items": {
+              "oneOf": [
+                {
+                  "type": "object",
+                  "required": [
+                    "action"
+                  ],
+                  "properties": {
+                    "id": {
+                      "type": "string"
+                    },
+                    "action": {
+                      "enum": [
+                        "open",
+                        "attach",
+                        "click",
+                        "fill",
+                        "select",
+                        "upload",
+                        "press",
+                        "waitFor",
+                        "screenshot",
+                        "assertVisible",
+                        "assertText",
+                        "assertValue",
+                        "assertValidation",
+                        "assertRequest",
+                        "assertResponse"
+                      ]
+                    },
+                    "target": {
+                      "type": "object"
+                    },
+                    "api": {
+                      "type": "string"
+                    },
+                    "expected": {},
+                    "value": {},
+                    "key": {
+                      "type": "string"
+                    },
+                    "file": {
+                      "type": "string"
+                    },
+                    "timeoutMs": {
+                      "type": "number",
+                      "minimum": 0
+                    },
+                    "state": {
+                      "enum": [
+                        "attached",
+                        "detached",
+                        "visible",
+                        "hidden"
+                      ]
+                    }
+                  },
+                  "additionalProperties": true
+                },
+                {
+                  "type": "object",
+                  "minProperties": 1,
+                  "properties": {
+                    "open": {
+                      "type": "string"
+                    },
+                    "click": {
+                      "type": "object"
+                    },
+                    "fill": {
+                      "type": "object"
+                    },
+                    "assertVisible": {
+                      "type": "object"
+                    },
+                    "assertRequest": {
+                      "type": "object"
+                    },
+                    "assertResponse": {
+                      "type": "object"
+                    }
+                  },
+                  "additionalProperties": false
+                }
+              ]
+            }
+          }
+        }
+      }
+    },
     "quality": {
       "type": "object",
       "properties": {
-        "screenshot": { "enum": ["required", "each-step", "final"] },
-        "trace": { "type": "boolean" },
-        "consoleErrors": { "enum": ["ignore", "warn", "fail"] },
-        "redactSensitiveData": { "type": "boolean" }
+        "screenshot": {
+          "enum": [
+            "required",
+            "each-step",
+            "final"
+          ]
+        },
+        "trace": {
+          "type": "boolean"
+        },
+        "consoleErrors": {
+          "enum": [
+            "ignore",
+            "warn",
+            "fail"
+          ]
+        },
+        "redactSensitiveData": {
+          "type": "boolean"
+        }
       },
       "additionalProperties": true
     },
-    "data": { "type": "object" },
-    "components": { "type": "array", "items": { "type": "object", "required": ["id", "path", "impact"] } }
+    "data": {
+      "type": "object"
+    },
+    "components": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "id",
+          "path",
+          "impact"
+        ]
+      }
+    }
   },
   "additionalProperties": false
 }

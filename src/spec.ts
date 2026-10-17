@@ -10,9 +10,9 @@ export async function loadSpec(file: string): Promise<{ spec: AcceptanceSpec; no
   const value = path.extname(file).toLowerCase() === '.json' ? JSON.parse(source) : YAML.parse(source);
   if (!value || typeof value !== 'object') throw new Error('验收规格必须是 YAML 或 JSON 对象');
   const spec = normalizeSpec(value as AcceptanceSpec);
-  const schema = JSON.parse(await readSchema());
-  const valid = new Ajv({ allErrors: true }).compile(schema)(spec);
-  if (!valid) throw new Error(`验收规格校验失败：${JSON.stringify(valid.errors)}`);
+  const schema = JSON.parse(await readSchema('taskId' in (spec as Record<string, unknown>) ? 'acceptance-task.schema.json' : 'acceptance-spec.schema.json'));
+  const validate = new Ajv({ allErrors: true }).compile(schema);
+  if (!validate(spec)) throw new Error(`验收规格校验失败：${JSON.stringify(validate.errors)}`);
   return { spec, normalized: stableStringify(spec) };
 }
 
@@ -32,7 +32,7 @@ export function stableStringify(value: unknown): string {
   return `{${Object.keys(value as Record<string, unknown>).sort().map((key) => `${JSON.stringify(key)}:${stableStringify((value as Record<string, unknown>)[key])}`).join(',')}}`;
 }
 
-async function readSchema(): Promise<string> {
-  try { return await readFile(new URL('../schemas/acceptance-spec.schema.json', import.meta.url), 'utf8'); }
-  catch { return await readFile(path.resolve(process.cwd(), 'schemas/acceptance-spec.schema.json'), 'utf8'); }
+async function readSchema(name: string): Promise<string> {
+  try { return await readFile(new URL(`../schemas/${name}`, import.meta.url), 'utf8'); }
+  catch { return await readFile(path.resolve(process.cwd(), 'schemas', name), 'utf8'); }
 }
