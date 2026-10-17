@@ -1,0 +1,71 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "AcceptanceResult",
+  "type": "object",
+  "required": [
+    "runId",
+    "specId",
+    "scenarioId",
+    "status",
+    "decision",
+    "evidence",
+    "checks"
+  ],
+  "properties": {
+    "runId": {
+      "type": "string"
+    },
+    "specId": {
+      "type": "string"
+    },
+    "specVersion": {
+      "type": "integer"
+    },
+    "scenarioId": {
+      "type": "string"
+    },
+    "status": {
+      "enum": [
+        "passed",
+        "failed",
+        "blocked",
+        "skipped"
+      ]
+    },
+    "decision": {
+      "enum": [
+        "pass",
+        "fail",
+        "needs_review"
+      ]
+    },
+    "evidence": {
+      "type": "object",
+      "required": [
+        "screenshot",
+        "requests",
+        "responses"
+      ],
+      "properties": {
+        "screenshot": {
+          "type": "string"
+        },
+        "trace": {
+          "type": "string"
+        },
+        "requests": {
+          "type": "string"
+        },
+        "responses": {
+          "type": "string"
+        }
+      }
+    },
+    "checks": {
+      "type": "array"
+    },
+    "aiReview": {
+      "type": "object"
+    }
+  }
+}

@@ -1,0 +1,50 @@
+id: user-list
+version: 1
+route: /users
+
+pages:
+  - id: user-list
+    route: /users
+    purpose: 查询和管理用户
+    viewports: [1440x900, 390x844]
+    components:
+      - id: user-table
+        kind: table
+        mustShow: [name, status, createdAt]
+        detailOnly: [phone, address]
+      - id: user-edit-drawer
+        kind: drawer
+        trigger: 编辑
+
+apis:
+  - id: list-users
+    method: GET
+    path: /api/users
+    query:
+      page: integer
+      pageSize: integer
+      keyword: string?
+    responseSchema: UserPage
+  - id: update-user
+    method: PATCH
+    path: /api/users/:id
+    requestSchema: UpdateUser
+
+scenarios:
+  - id: edit-user
+    priority: critical
+    steps:
+      - open: /users
+      - click: 编辑
+      - assertVisible: { role: dialog }
+      - fill: { label: 姓名, value: 张三 }
+      - click: 保存
+      - assertRequest:
+          api: update-user
+          body: { name: 张三 }
+      - assertVisible: 保存成功
+
+quality:
+  screenshot: required
+  accessibility: critical
+  forbiddenConsoleErrors: true
