@@ -79,6 +79,28 @@ acceptance-runner run acceptance-task.json `
 
 `--browser edge` 使用系统安装的 Microsoft Edge，不会下载 Playwright 自带浏览器。Windows 下可使用 PowerShell 或 `acceptance-runner.cmd`。
 
+### 作为 npm 包和 Codex Skill 使用
+
+业务项目可以直接调用高层 API：
+
+```bash
+npm install -D @frontend-api-evidence-gate/runner
+```
+
+```ts
+import { accept } from '@frontend-api-evidence-gate/runner';
+
+const run = await accept({
+  task,
+  outputDir: './artifacts/acceptance',
+  browser: 'chromium',
+});
+
+if (run.decision !== 'pass') throw new Error(`验收未通过：${run.decision}`);
+```
+
+发布包同时包含 `skills/frontend-api-evidence-gate/SKILL.md`。将该文件安装到 Codex 的 skills 目录后，Agent 会在页面、表单或 API 改动时自动生成任务、运行验收、读取证据并重验。MCP 服务仍可通过 `acceptance-runner-server` 提供给其他 Agent。
+
 目标模式和运行保护：
 
 ```bash
