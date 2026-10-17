@@ -4,8 +4,8 @@
   "description": "Framework-agnostic AI frontend acceptance runner with browser and API evidence.",
   "type": "module",
   "bin": {
-    "acceptance-runner": "./dist/cli.js",
-    "acceptance-runner-server": "./dist/server.js"
+    "acceptance-runner": "dist/cli.js",
+    "acceptance-runner-server": "dist/server.js"
   },
   "exports": {
     ".": "./dist/index.js"
