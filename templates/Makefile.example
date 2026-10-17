@@ -1,0 +1,22 @@
+.PHONY: backend frontend contract e2e-critical check verify
+
+backend:
+	go test ./...
+	go vet ./...
+	golangci-lint run
+
+frontend:
+	pnpm lint
+	pnpm typecheck
+	pnpm test -- --run
+	pnpm build
+
+contract:
+	./scripts/check-openapi.sh
+
+e2e-critical:
+	pnpm playwright test tests/e2e/critical
+
+check: backend frontend contract
+
+verify: check e2e-critical

@@ -1,0 +1,25 @@
+# 将以下步骤映射到 GitHub Actions、Gitee CI 或其他 CI 平台。
+name: verify
+
+steps:
+  - name: backend-unit-and-lint
+    run: |
+      go test ./...
+      go vet ./...
+      golangci-lint run
+
+  - name: frontend-quality
+    run: |
+      pnpm install --frozen-lockfile
+      pnpm lint
+      pnpm typecheck
+      pnpm test -- --run
+      pnpm build
+
+  - name: api-contract
+    run: ./scripts/check-openapi.sh
+
+  - name: e2e-critical
+    run: pnpm playwright test tests/e2e/critical --reporter=html
+
+# PR 设置中将以上检查设为 Required checks。
