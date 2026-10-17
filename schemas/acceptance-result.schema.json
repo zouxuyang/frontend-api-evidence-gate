@@ -264,6 +264,9 @@
         },
         "url": {
           "type": "string"
+        },
+        "apiId": {
+          "type": "string"
         }
       },
       "additionalProperties": false

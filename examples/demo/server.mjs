@@ -10,7 +10,7 @@ const html = await readFile(new URL('./index.html', import.meta.url));
 const server = createServer(async (req, res) => {
   const url = new URL(req.url, 'http://localhost:4173');
   res.setHeader('Content-Type', 'application/json; charset=utf-8');
-  if (req.method === 'GET' && url.pathname === '/') { res.setHeader('Content-Type', 'text/html; charset=utf-8'); res.end(html); return; }
+  if (req.method === 'GET' && (url.pathname === '/' || url.pathname === '/bad')) { res.setHeader('Content-Type', 'text/html; charset=utf-8'); res.end(url.pathname === '/bad' ? await readFile(new URL('./bad-page/index.html', import.meta.url)) : html); return; }
   if (req.method === 'GET' && url.pathname === '/api/orders') {
     const keyword = url.searchParams.get('keyword') ?? '';
     const page = Number(url.searchParams.get('page') ?? 1);
@@ -21,7 +21,9 @@ const server = createServer(async (req, res) => {
   if (req.method === 'PATCH' && url.pathname.startsWith('/api/orders/')) {
     let body = ''; for await (const chunk of req) body += chunk;
     const order = orders.find((item) => item.id === url.pathname.split('/').pop());
-    Object.assign(order, JSON.parse(body));
+    const payload = JSON.parse(body);
+    if (Object.prototype.hasOwnProperty.call(payload, 'notes')) { res.statusCode = 422; res.end(JSON.stringify({ message: '字段 notes 不符合 API 契约，应使用 remark' })); return; }
+    Object.assign(order, payload);
     res.end(JSON.stringify(order)); return;
   }
   res.statusCode = 404; res.end(JSON.stringify({ message: 'Not found' }));

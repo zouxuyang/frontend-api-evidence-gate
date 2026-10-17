@@ -1,0 +1,61 @@
+[
+  {
+    "requestId": "GET-http://127.0.0.1:4173/bad-1792213652463",
+    "startedAt": "2026-10-17T05:07:32.463Z",
+    "method": "GET",
+    "url": "http://127.0.0.1:4173/bad",
+    "headers": {
+      "upgrade-insecure-requests": "1",
+      "user-agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/156.0.8078.4 Safari/537.36",
+      "sec-ch-ua": "\"Not:A-Brand\";v=\"8\", \"Chromium\";v=\"156\", \"HeadlessChrome\";v=\"156\"",
+      "sec-ch-ua-mobile": "?0",
+      "sec-ch-ua-platform": "\"macOS\""
+    }
+  },
+  {
+    "requestId": "GET-http://127.0.0.1:4173/api/orders?page=1&pageSize=10&keyword=-1792213652468",
+    "apiId": "list-orders",
+    "startedAt": "2026-10-17T05:07:32.468Z",
+    "method": "GET",
+    "url": "http://127.0.0.1:4173/api/orders?page=1&pageSize=10&keyword=",
+    "headers": {
+      "sec-ch-ua-platform": "\"macOS\"",
+      "referer": "http://127.0.0.1:4173/bad",
+      "user-agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/156.0.8078.4 Safari/537.36",
+      "sec-ch-ua": "\"Not:A-Brand\";v=\"8\", \"Chromium\";v=\"156\", \"HeadlessChrome\";v=\"156\"",
+      "sec-ch-ua-mobile": "?0"
+    }
+  },
+  {
+    "requestId": "GET-http://127.0.0.1:4173/api/orders?page=1&pageSize=10&keyword=ORD-001-1792213652537",
+    "apiId": "list-orders",
+    "startedAt": "2026-10-17T05:07:32.537Z",
+    "method": "GET",
+    "url": "http://127.0.0.1:4173/api/orders?page=1&pageSize=10&keyword=ORD-001",
+    "headers": {
+      "sec-ch-ua-platform": "\"macOS\"",
+      "referer": "http://127.0.0.1:4173/bad",
+      "user-agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/156.0.8078.4 Safari/537.36",
+      "sec-ch-ua": "\"Not:A-Brand\";v=\"8\", \"Chromium\";v=\"156\", \"HeadlessChrome\";v=\"156\"",
+      "sec-ch-ua-mobile": "?0"
+    }
+  },
+  {
+    "requestId": "PATCH-http://127.0.0.1:4173/api/orders/1-1792213654618",
+    "apiId": "update-order",
+    "startedAt": "2026-10-17T05:07:34.618Z",
+    "method": "PATCH",
+    "url": "http://127.0.0.1:4173/api/orders/1",
+    "headers": {
+      "sec-ch-ua-platform": "\"macOS\"",
+      "referer": "http://127.0.0.1:4173/bad",
+      "user-agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/156.0.8078.4 Safari/537.36",
+      "sec-ch-ua": "\"Not:A-Brand\";v=\"8\", \"Chromium\";v=\"156\", \"HeadlessChrome\";v=\"156\"",
+      "content-type": "application/json",
+      "sec-ch-ua-mobile": "?0"
+    },
+    "body": {
+      "notes": "需要尽快处理"
+    }
+  }
+]

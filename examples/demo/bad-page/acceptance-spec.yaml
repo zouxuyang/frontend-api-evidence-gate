@@ -1,0 +1,33 @@
+specId: demo-bad-order-list
+specVersion: 1
+project:
+  baseUrl: http://127.0.0.1:4173
+pages:
+  - id: bad-order-list
+    route: /bad
+apis:
+  - id: list-orders
+    method: GET
+    path: /api/orders
+  - id: update-order
+    method: PATCH
+    path: /api/orders/:id
+scenarios:
+  - id: detect-search-and-edit-regressions
+    page: bad-order-list
+    priority: critical
+    steps:
+      - open: /bad
+      - fill: { label: 搜索订单, value: ORD-001 }
+      - click: { role: button, name: 搜索 }
+      - assertRequest: { api: list-orders, method: GET, query: { page: 1, pageSize: 20, keyword: ORD-001 } }
+      - assertResponse: { api: list-orders, status: 200, query: { keyword: ORD-001 } }
+      - click: { role: button, name: 编辑 }
+      - assertVisible: { role: dialog }
+      - fill: { label: 备注, value: 需要尽快处理 }
+      - click: { role: button, name: 保存 }
+      - assertRequest: { api: update-order, method: PATCH, body: { remark: 需要尽快处理 } }
+      - assertResponse: { api: update-order, status: 200 }
+      - assertVisible: { text: 保存成功 }
+quality:
+  screenshot: required

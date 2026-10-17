@@ -1,0 +1,100 @@
+[
+  {
+    "url": "http://127.0.0.1:4173/bad",
+    "requestId": "GET-http://127.0.0.1:4173/bad-1792213652463",
+    "status": 200,
+    "durationMs": 14,
+    "headers": {
+      "connection": "keep-alive",
+      "content-length": "3009",
+      "content-type": "text/html; charset=utf-8",
+      "date": "Sat, 17 Oct 2026 05:07:32 GMT",
+      "keep-alive": "timeout=5"
+    },
+    "contentType": "text/html; charset=utf-8",
+    "rawBody": "<!doctype html>\n<html lang=\"zh-CN\"><head><meta charset=\"utf-8\"><meta name=\"viewport\" content=\"width=device-width,initial-scale=1\"><title>订单列表（问题示例）</title>\n<style>body{font:16px system-ui;margin:0;background:#f5f7fb;color:#172033}main{max-width:900px;margin:40px auto;background:#fff;padding:28px;border-radius:14px;box-shadow:0 8px 30px #18284a14}form{display:flex;gap:12px;align-items:end;margin:20px 0}label{display:flex;flex-direction:column;gap:6px}input{padding:9px;border:1px solid #cbd5e1;border-radius:6px}button{padding:9px 15px;border:0;border-radius:6px;background:#2563eb;color:#fff;cursor:pointer}table{width:100%;border-collapse:collapse}th,td{text-align:left;padding:12px;border-bottom:1px solid #e5e7eb}.modal{position:fixed;inset:0;background:#0006;display:grid;place-items:center}.dialog{background:#fff;padding:24px;border-radius:12px;width:900px;max-width:none}.hidden{display:none}.feedback{min-height:24px;color:#b91c1c}</style></head>\n<body><main><h1>订单列表</h1><form id=\"search\"><label>搜索订单<input id=\"keyword\" aria-label=\"搜索订单\"></label><button type=\"submit\">搜索</button></form><p id=\"feedback\" class=\"feedback\" role=\"status\"></p><table><thead><tr><th>订单号</th><th>状态</th><th>金额</th><th>操作</th></tr></thead><tbody id=\"rows\"></tbody></table><p><button id=\"next\" type=\"button\">下一页</button></p></main>\n<div id=\"modal\" class=\"modal hidden\"><div class=\"dialog\" role=\"dialog\" aria-modal=\"true\" aria-labelledby=\"edit-title\"><h2 id=\"edit-title\">编辑订单</h2><label>备注<input id=\"remark\" aria-label=\"备注\"></label><p id=\"modal-feedback\" class=\"modal-feedback\" role=\"status\"></p><p><button id=\"save\">保存</button> <button id=\"close\" type=\"button\">关闭</button></p></div></div>\n<script>\nlet page=1,currentId='1'; const $=id=>document.getElementById(id);\nasync function load(){const keyword=$('keyword').value; const res=await fetch(`/api/orders?page=${page}&pageSize=10&keyword=${encodeURIComponent(keyword)}`); const data=await res.json(); $('rows').innerHTML=data.items.map(o=>`<tr><td>${o.orderNo}</td><td>${o.status}</td><td>${o.amount}</td><td><button data-id=\"${o.id}\" class=\"edit\">编辑</button></td></tr>`).join(''); document.querySelectorAll('.edit').forEach(b=>b.onclick=()=>openEdit(b.dataset.id));}\nfunction openEdit(id){currentId=id;$('remark').value='';$('modal').classList.remove('hidden');} $('close').onclick=()=>$('modal').classList.add('hidden'); $('search').onsubmit=e=>{e.preventDefault();page=1;load();}; $('next').onclick=()=>{page=2;load();}; $('save').onclick=async()=>{const res=await fetch(`/api/orders/${currentId}`,{method:'PATCH',headers:{'Content-Type':'application/json'},body:JSON.stringify({notes:$('remark').value})}); if(res.ok){$('modal').classList.add('hidden');$('feedback').textContent='保存成功';}else{$('feedback').textContent='保存失败，请重试';$('modal-feedback').textContent='接口错误：字段 notes 不符合约定';}}; load();\n</script></body></html>\n"
+  },
+  {
+    "apiId": "list-orders",
+    "url": "http://127.0.0.1:4173/api/orders?page=1&pageSize=10&keyword=",
+    "requestId": "GET-http://127.0.0.1:4173/api/orders?page=1&pageSize=10&keyword=-1792213652468",
+    "status": 200,
+    "durationMs": 10,
+    "headers": {
+      "keep-alive": "timeout=5",
+      "content-length": "223",
+      "date": "Sat, 17 Oct 2026 05:07:32 GMT",
+      "content-type": "application/json; charset=utf-8",
+      "connection": "keep-alive"
+    },
+    "contentType": "application/json; charset=utf-8",
+    "body": {
+      "items": [
+        {
+          "id": "1",
+          "orderNo": "ORD-001",
+          "status": "待处理",
+          "amount": 1280,
+          "remark": "优先配送"
+        },
+        {
+          "id": "2",
+          "orderNo": "ORD-002",
+          "status": "已完成",
+          "amount": 860,
+          "remark": "普通配送"
+        }
+      ],
+      "page": 1,
+      "pageSize": 10,
+      "total": 2
+    }
+  },
+  {
+    "apiId": "list-orders",
+    "url": "http://127.0.0.1:4173/api/orders?page=1&pageSize=10&keyword=ORD-001",
+    "requestId": "GET-http://127.0.0.1:4173/api/orders?page=1&pageSize=10&keyword=ORD-001-1792213652537",
+    "status": 200,
+    "durationMs": 14,
+    "headers": {
+      "keep-alive": "timeout=5",
+      "content-length": "134",
+      "date": "Sat, 17 Oct 2026 05:07:32 GMT",
+      "content-type": "application/json; charset=utf-8",
+      "connection": "keep-alive"
+    },
+    "contentType": "application/json; charset=utf-8",
+    "body": {
+      "items": [
+        {
+          "id": "1",
+          "orderNo": "ORD-001",
+          "status": "待处理",
+          "amount": 1280,
+          "remark": "优先配送"
+        }
+      ],
+      "page": 1,
+      "pageSize": 10,
+      "total": 1
+    }
+  },
+  {
+    "apiId": "update-order",
+    "url": "http://127.0.0.1:4173/api/orders/1",
+    "requestId": "PATCH-http://127.0.0.1:4173/api/orders/1-1792213654618",
+    "status": 422,
+    "durationMs": 67,
+    "headers": {
+      "keep-alive": "timeout=5",
+      "content-length": "66",
+      "date": "Sat, 17 Oct 2026 05:07:34 GMT",
+      "content-type": "application/json; charset=utf-8",
+      "connection": "keep-alive"
+    },
+    "contentType": "application/json; charset=utf-8",
+    "body": {
+      "message": "字段 notes 不符合 API 契约，应使用 remark"
+    }
+  }
+]

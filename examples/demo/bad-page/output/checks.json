@@ -1,0 +1,90 @@
+[
+  {
+    "id": "assertRequest-1",
+    "type": "api-contract",
+    "status": "failed",
+    "expected": {
+      "api": "list-orders",
+      "method": "GET",
+      "query": {
+        "page": 1,
+        "pageSize": 20,
+        "keyword": "ORD-001"
+      }
+    }
+  },
+  {
+    "id": "assertResponse-2",
+    "type": "api-response",
+    "status": "passed",
+    "expected": {
+      "api": "list-orders",
+      "status": 200,
+      "query": {
+        "keyword": "ORD-001"
+      }
+    },
+    "actual": {
+      "apiId": "list-orders",
+      "url": "http://127.0.0.1:4173/api/orders?page=1&pageSize=10&keyword=ORD-001",
+      "requestId": "GET-http://127.0.0.1:4173/api/orders?page=1&pageSize=10&keyword=ORD-001-1792213652537",
+      "status": 200,
+      "durationMs": 14,
+      "headers": {
+        "keep-alive": "timeout=5",
+        "content-length": "134",
+        "date": "Sat, 17 Oct 2026 05:07:32 GMT",
+        "content-type": "application/json; charset=utf-8",
+        "connection": "keep-alive"
+      },
+      "contentType": "application/json; charset=utf-8",
+      "body": {
+        "items": [
+          {
+            "id": "1",
+            "orderNo": "ORD-001",
+            "status": "待处理",
+            "amount": 1280,
+            "remark": "优先配送"
+          }
+        ],
+        "page": 1,
+        "pageSize": 10,
+        "total": 1
+      }
+    }
+  },
+  {
+    "id": "assertVisible-3",
+    "type": "visibility",
+    "status": "passed",
+    "actual": true
+  },
+  {
+    "id": "assertRequest-4",
+    "type": "api-contract",
+    "status": "failed",
+    "expected": {
+      "api": "update-order",
+      "method": "PATCH",
+      "body": {
+        "remark": "需要尽快处理"
+      }
+    }
+  },
+  {
+    "id": "assertResponse-5",
+    "type": "api-response",
+    "status": "failed",
+    "expected": {
+      "api": "update-order",
+      "status": 200
+    }
+  },
+  {
+    "id": "assertVisible-6",
+    "type": "visibility",
+    "status": "failed",
+    "actual": false
+  }
+]
