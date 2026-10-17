@@ -64,6 +64,10 @@
         },
         "semanticHash": {
           "type": "string"
+        },
+        "dependencyHashes": {
+          "type": "object",
+          "additionalProperties": { "type": "string" }
         }
       },
       "additionalProperties": false
@@ -104,6 +108,9 @@
           "type": "string"
         },
         "console": {
+          "type": "string"
+        },
+        "axe": {
           "type": "string"
         }
       },

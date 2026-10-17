@@ -93,9 +93,9 @@ export interface AcceptanceResult {
   scenarioId: string;
   status: AcceptanceStatus;
   decision: AcceptanceDecision;
-  fingerprint: { scenarioHash: string; specHash: string; contentHash?: string; semanticHash?: string };
+  fingerprint: { scenarioHash: string; specHash: string; contentHash?: string; semanticHash?: string; dependencyHashes?: Record<string, string> };
   reusedFrom: string | null;
-  evidence: { screenshot: string; screenshots?: string[]; trace?: string; checks: string; requests: string; responses: string; console?: string };
+  evidence: { screenshot: string; screenshots?: string[]; trace?: string; checks: string; requests: string; responses: string; console?: string; axe?: string };
   requests: RequestEvidence[];
   responses: ResponseEvidence[];
   checks: CheckResult[];

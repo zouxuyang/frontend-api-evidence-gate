@@ -2,6 +2,7 @@ import { cp, mkdir, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { chromium, type Browser, type BrowserContext, type Page, type Request } from 'playwright';
 import Ajv2020 from 'ajv/dist/2020.js';
+import AxeBuilder from '@axe-core/playwright';
 import type { AcceptanceResult, AcceptanceSpec, BrowserTarget, CheckResult, RequestEvidence, ResponseEvidence, ScenarioSpec, StepResult } from './types.js';
 import { buildHashes, readReusableResult } from './fingerprint.js';
 import type { ModelAdapter } from './model.js';
@@ -85,8 +86,15 @@ async function runScenario(browser: Browser, options: RunOptions, scenario: Scen
   let detachNetwork: (() => void) | undefined;
   const consoleMessages: Array<Record<string, unknown>> = [];
   try {
-    page = await selectPage(browser, target);
-    tracingContext = page.context();
+    if (target.mode !== 'existing') {
+      // axe-core requires a context created with browser.newContext(); the
+      // browser's implicit default context is not supported by its runner.
+      tracingContext = await browser.newContext();
+      page = await tracingContext.newPage();
+    } else {
+      page = await selectPage(browser, target);
+      tracingContext = page.context();
+    }
     const traceEnabled = options.spec.quality?.trace !== false;
     if (traceEnabled) await tracingContext.tracing.start({ screenshots: true, snapshots: true });
     detachNetwork = attachNetworkEvidence(page, options.spec, requests, responses, consoleMessages, options.spec.quality?.redactSensitiveData !== false, options.maxResponseBodyBytes ?? 1024 * 1024);
@@ -116,6 +124,12 @@ async function runScenario(browser: Browser, options: RunOptions, scenario: Scen
       const passed = Object.values(accessibility).every((value) => value === 0);
       checks.push({ id: `${scenario.id}.accessibility`, type: 'accessibility', status: passed ? 'passed' : 'failed', expected: { missingImageAlt: 0, unlabeledInputs: 0, unnamedButtons: 0 }, actual: accessibility });
     }
+    let axeReport: unknown;
+    if (options.spec.quality?.accessibility === 'axe') {
+      axeReport = await new AxeBuilder({ page }).analyze();
+      const violations = (axeReport as { violations?: unknown[] }).violations ?? [];
+      checks.push({ id: `${scenario.id}.axe`, type: 'accessibility', status: violations.length === 0 ? 'passed' : 'failed', expected: { violations: 0 }, actual: { violations } });
+    }
     const screenshot = path.join(artifactDir, 'screenshot.png');
     await page.screenshot({ path: screenshot, fullPage: true });
     const tracePath = options.spec.quality?.trace === false ? undefined : path.join(artifactDir, 'trace.zip');
@@ -125,10 +139,11 @@ async function runScenario(browser: Browser, options: RunOptions, scenario: Scen
     const result: AcceptanceResult = {
       runId, taskId: options.spec.taskId, specId: options.spec.specId, specVersion: options.spec.specVersion, scenarioId: scenario.id,
       status: decision === 'fail' ? 'failed' : 'passed', decision, fingerprint, reusedFrom: null,
-      evidence: { screenshot, screenshots: steps.flatMap((step) => step.evidenceRefs), trace: tracePath, console: path.join(artifactDir, 'console.json'), checks: path.join(artifactDir, 'checks.json'), requests: path.join(artifactDir, 'requests.json'), responses: path.join(artifactDir, 'responses.json') },
+      evidence: { screenshot, screenshots: steps.flatMap((step) => step.evidenceRefs), trace: tracePath, console: path.join(artifactDir, 'console.json'), axe: axeReport ? path.join(artifactDir, 'axe.json') : undefined, checks: path.join(artifactDir, 'checks.json'), requests: path.join(artifactDir, 'requests.json'), responses: path.join(artifactDir, 'responses.json') },
       requests, responses, checks, steps, findings: modelReview?.findings ?? [], ...(modelReview ? { aiReview: modelReview } : {})
     };
     await writeArtifacts(artifactDir, result);
+    if (axeReport) await writeFile(path.join(artifactDir, 'axe.json'), JSON.stringify(axeReport, null, 2));
     await updateLatest(options.outputDir, scenario.id, artifactDir);
     return result;
   } catch (error) {
@@ -147,7 +162,10 @@ async function runScenario(browser: Browser, options: RunOptions, scenario: Scen
   } finally {
     detachNetwork?.();
     await writeFile(path.join(artifactDir, 'console.json'), JSON.stringify(consoleMessages, null, 2));
-    if (target.mode !== 'existing') await page?.close();
+    if (target.mode !== 'existing') {
+      await page?.close();
+      await tracingContext?.close();
+    }
   }
 }
 

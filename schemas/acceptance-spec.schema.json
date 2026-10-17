@@ -269,7 +269,8 @@
         "accessibility": {
           "enum": [
             "ignore",
-            "fail"
+            "fail",
+            "axe"
           ]
         }
       },

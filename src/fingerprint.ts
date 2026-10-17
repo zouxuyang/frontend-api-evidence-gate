@@ -10,9 +10,10 @@ const sha256 = (value: string | Buffer) => createHash('sha256').update(value).di
 export function buildHashes(spec: AcceptanceSpec, normalized: string, scenario: ScenarioSpec, runtime: Record<string, unknown> = {}) {
   const specHash = sha256(normalized);
   const files = (spec.components ?? []).map((component) => ({ path: component.path, contentHash: hashFile(component.path) }));
+  const dependencyHashes = Object.fromEntries(files.map((file) => [file.path, file.contentHash]));
   const contentHash = sha256(stableStringify({ files, pages: spec.pages ?? [], apis: spec.apis ?? [] }));
   const semanticHash = sha256(stableStringify({ scenario, files, components: spec.components ?? [], apis: spec.apis ?? [], runtime }));
-  return { specHash, contentHash, semanticHash, scenarioHash: sha256(`${specHash}:${contentHash}:${semanticHash}`) };
+  return { specHash, contentHash, semanticHash, dependencyHashes, scenarioHash: sha256(`${specHash}:${contentHash}:${semanticHash}`) };
 }
 
 function hashFile(file: string) { try { const resolved = existsSync(file) ? file : path.resolve(process.cwd(), file); return existsSync(resolved) ? sha256(readFileSync(resolved)) : 'missing'; } catch { return 'unreadable'; } }
