@@ -17,6 +17,10 @@
   ],
   "scripts": {
     "build": "tsc -p tsconfig.json",
+    "dev": "tsc -p tsconfig.json --watch --preserveWatchOutput",
+    "dev:server": "node --watch dist/server.js",
+    "debug:cli": "node --inspect-brk=9229 dist/cli.js",
+    "debug:server": "node --inspect=9230 dist/server.js",
     "prepack": "npm run build",
     "check": "tsc -p tsconfig.json --noEmit",
     "plan": "node dist/cli.js plan",

@@ -42,6 +42,34 @@ npm run build
 npm run plan -- examples/demo/acceptance-spec.yaml
 ```
 
+## 本地调试与自动重载
+
+本地开发建议让 Codex 使用源码链接，而不是复制发布包：
+
+```bash
+npm install --global --prefix /Volumes/1T/codex-cache/npm-global \
+  /Users/wowo/Desktop/projects/frontend-api-evidence-gate \
+  --no-audit --no-fund
+```
+
+该命令会把全局 `acceptance-runner` 链接到当前源码目录。启动 TypeScript watch：
+
+```bash
+npm run dev
+```
+
+源码变化会自动重新生成 `dist`。之后直接执行 `acceptance-runner` 或 `npm run acceptance -- ...`，每次都会加载最新构建结果，不需要重新安装。
+
+调试常驻的 HTTP/MCP 服务时，另开终端执行：
+
+```bash
+npm run dev:server
+```
+
+Node 会在 `dist/server.js` 变化后自动重启服务。需要断点调试时使用 `npm run debug:cli`（Node Inspector `9229`）或 `npm run debug:server`（Inspector `9230`）。
+
+`dist` 使用 source map，调试器可以回到 `src/*.ts`。依赖、浏览器缓存和验收产物仍应放在外置盘；源码修改后先让 watch 完成一次编译，再运行验收任务。
+
 启动示例 API 和页面：
 
 ```bash
