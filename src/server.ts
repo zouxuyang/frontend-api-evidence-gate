@@ -13,11 +13,14 @@ export interface AcceptanceServerOptions {
 }
 
 const jobs = new Map<string, { controller: AbortController; status: 'running' | 'completed' | 'failed' | 'cancelled'; result?: unknown; error?: string }>();
+let activeRuns = 0;
 
 export function createAcceptanceServer(options: AcceptanceServerOptions = {}): Server {
   return createServer(async (request, response) => {
     try {
       if (request.method === 'GET' && request.url === '/health') return sendJson(response, 200, { ok: true });
+      const expectedToken = process.env.ACCEPTANCE_API_TOKEN;
+      if (expectedToken && request.headers.authorization !== `Bearer ${expectedToken}`) return sendJson(response, 401, { error: 'Unauthorized' });
       if (request.method === 'GET' && request.url === '/mcp') return sendJson(response, 200, { name: 'frontend-api-evidence-gate', protocolVersion: '2025-03-26' });
       if (request.method === 'GET' && request.url?.startsWith('/jobs/')) { const job = jobs.get(request.url.slice('/jobs/'.length)); return job ? sendJson(response, 200, { status: job.status, result: job.result, error: job.error }) : sendJson(response, 404, { error: 'Job not found' }); }
       if (request.method === 'POST' && request.url?.startsWith('/jobs/') && request.url.endsWith('/cancel')) { const job = jobs.get(request.url.slice('/jobs/'.length, -'/cancel'.length)); if (!job) return sendJson(response, 404, { error: 'Job not found' }); job.controller.abort(new Error('任务已取消')); job.status = 'cancelled'; return sendJson(response, 202, { status: job.status }); }
@@ -44,6 +47,10 @@ async function handleRun(payload: Record<string, unknown>, response: ServerRespo
 }
 
 async function runPayload(payload: Record<string, unknown>, options: AcceptanceServerOptions, signal?: AbortSignal) {
+  const maxConcurrent = Number(process.env.ACCEPTANCE_MAX_CONCURRENCY ?? 2);
+  if (activeRuns >= maxConcurrent) throw new Error('验收服务当前已达到并发上限');
+  activeRuns += 1;
+  try {
   const task = (payload.task ?? payload) as AcceptanceSpec;
   const spec = normalizeSpec(task);
   await validateSpec(spec);
@@ -60,6 +67,7 @@ async function runPayload(payload: Record<string, unknown>, options: AcceptanceS
     browserTarget: runOptions.browserTarget ?? spec.browser
   });
   return { taskId: spec.taskId, specId: spec.specId, results };
+  } finally { activeRuns -= 1; }
 }
 
 async function handleMcp(payload: Record<string, unknown>, response: ServerResponse, options: AcceptanceServerOptions) {

@@ -107,6 +107,15 @@ async function runScenario(browser: Browser, options: RunOptions, scenario: Scen
       }
     }
     if (options.spec.quality?.consoleErrors === 'fail' && consoleMessages.length > 0) checks.push({ id: `${scenario.id}.console`, type: 'console-error', status: 'failed', actual: consoleMessages });
+    if (options.spec.quality?.layoutOverflow === 'fail') {
+      const layout = await page.evaluate(() => ({ scrollWidth: document.documentElement.scrollWidth, clientWidth: document.documentElement.clientWidth, scrollHeight: document.documentElement.scrollHeight, clientHeight: document.documentElement.clientHeight }));
+      checks.push({ id: `${scenario.id}.layout`, type: 'layout-overflow', status: layout.scrollWidth <= layout.clientWidth ? 'passed' : 'failed', expected: { overflowX: false }, actual: layout });
+    }
+    if (options.spec.quality?.accessibility === 'fail') {
+      const accessibility = await page.evaluate(() => ({ missingImageAlt: [...document.images].filter((image) => !image.hasAttribute('alt')).length, unlabeledInputs: [...document.querySelectorAll('input,select,textarea')].filter((element) => !element.getAttribute('aria-label') && !element.getAttribute('aria-labelledby') && !element.closest('label')).length, unnamedButtons: [...document.querySelectorAll('button')].filter((button) => !(button.textContent?.trim() || button.getAttribute('aria-label') || button.getAttribute('title'))).length }));
+      const passed = Object.values(accessibility).every((value) => value === 0);
+      checks.push({ id: `${scenario.id}.accessibility`, type: 'accessibility', status: passed ? 'passed' : 'failed', expected: { missingImageAlt: 0, unlabeledInputs: 0, unnamedButtons: 0 }, actual: accessibility });
+    }
     const screenshot = path.join(artifactDir, 'screenshot.png');
     await page.screenshot({ path: screenshot, fullPage: true });
     const tracePath = options.spec.quality?.trace === false ? undefined : path.join(artifactDir, 'trace.zip');
@@ -267,4 +276,4 @@ async function writeBlockedResult(options: RunOptions, scenario: ScenarioSpec, f
   await updateLatest(options.outputDir, scenario.id, artifactDir);
   return result;
 }
-async function writeRunSummary(outputDir: string, runId: string, spec: AcceptanceSpec, results: AcceptanceResult[]) { await mkdir(path.join(outputDir, runId), { recursive: true }); await writeFile(path.join(outputDir, runId, 'run-summary.json'), JSON.stringify({ runId, taskId: spec.taskId, specId: spec.specId, results }, null, 2)); }
+async function writeRunSummary(outputDir: string, runId: string, spec: AcceptanceSpec, results: AcceptanceResult[]) { await mkdir(path.join(outputDir, runId), { recursive: true }); await writeFile(path.join(outputDir, runId, 'run-summary.json'), JSON.stringify({ runId, taskId: spec.taskId, specId: spec.specId, selection: { total: results.length, run: results.filter((result) => result.status !== 'reused').length, reused: results.filter((result) => result.status === 'reused').length, items: results.map((result) => ({ scenarioId: result.scenarioId, action: result.status === 'reused' ? 'reuse' : 'run', reusedFrom: result.reusedFrom })) }, results }, null, 2)); }

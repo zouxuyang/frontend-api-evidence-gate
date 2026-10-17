@@ -259,6 +259,18 @@
         },
         "redactSensitiveData": {
           "type": "boolean"
+        },
+        "layoutOverflow": {
+          "enum": [
+            "ignore",
+            "fail"
+          ]
+        },
+        "accessibility": {
+          "enum": [
+            "ignore",
+            "fail"
+          ]
         }
       },
       "additionalProperties": true
