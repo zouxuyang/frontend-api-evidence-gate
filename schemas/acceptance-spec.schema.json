@@ -37,6 +37,7 @@
         "browser": {
           "enum": [
             "chromium",
+            "edge",
             "firefox",
             "webkit"
           ]

@@ -12,7 +12,7 @@ export interface RunOptions {
   normalizedSpec: string;
   outputDir: string;
   baseUrl?: string;
-  browser?: 'chromium' | 'firefox' | 'webkit';
+  browser?: 'chromium' | 'edge' | 'firefox' | 'webkit';
   browserTarget?: BrowserTarget;
   model?: ModelAdapter;
   reuse?: boolean;
@@ -67,12 +67,12 @@ export async function runAcceptance(options: RunOptions): Promise<AcceptanceResu
 async function connectBrowser(target: BrowserTarget, browserName?: RunOptions['browser']): Promise<Browser> {
   if (target.mode === 'existing') {
     if (!target.connection?.endpoint) throw new Error('已有浏览器模式缺少 CDP endpoint');
-    if (target.browser && target.browser !== 'chromium') throw new Error('已有浏览器模式当前只支持 Chromium/CDP');
+    if (target.browser && !['chromium', 'edge'].includes(target.browser)) throw new Error('已有浏览器模式当前只支持 Chromium/Edge/CDP');
     return chromium.connectOverCDP(target.connection.endpoint);
   }
   const name = target.browser ?? browserName ?? 'chromium';
   const launcher = name === 'firefox' ? (await import('playwright')).firefox : name === 'webkit' ? (await import('playwright')).webkit : chromium;
-  return launcher.launch({ headless: target.headless ?? true });
+  return launcher.launch({ headless: target.headless ?? true, ...(name === 'edge' ? { channel: 'msedge' } : {}) });
 }
 
 async function runScenario(browser: Browser, options: RunOptions, scenario: ScenarioSpec, fingerprint: AcceptanceResult['fingerprint'], runId: string, artifactDir: string, target: BrowserTarget): Promise<AcceptanceResult> {

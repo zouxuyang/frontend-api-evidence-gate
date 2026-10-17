@@ -58,6 +58,27 @@ PLAYWRIGHT_BROWSERS_PATH=/Volumes/1T/codex-cache/frontend-api-evidence-gate/ms-p
 
 通过版会验证搜索、编辑弹窗、PATCH 请求、响应和“保存成功”提示，结果为 `pass`。
 
+### Edge 和 Windows
+
+可以通过系统 Edge 通道启动 Microsoft Edge：
+
+```powershell
+acceptance-runner run acceptance-task.json --browser edge --headed
+```
+
+也可以连接已经打开的 Edge 标签页：
+
+```powershell
+msedge.exe --remote-debugging-port=9222
+acceptance-runner run acceptance-task.json `
+  --target existing `
+  --browser edge `
+  --cdp-endpoint http://127.0.0.1:9222 `
+  --tab-url https://test.example.com/orders
+```
+
+`--browser edge` 使用系统安装的 Microsoft Edge，不会下载 Playwright 自带浏览器。Windows 下可使用 PowerShell 或 `acceptance-runner.cmd`。
+
 目标模式和运行保护：
 
 ```bash

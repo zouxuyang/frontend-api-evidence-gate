@@ -19,7 +19,7 @@ export interface AcceptanceSpec {
 
 export interface BrowserTarget {
   mode?: 'launch' | 'existing';
-  browser?: 'chromium' | 'firefox' | 'webkit';
+  browser?: 'chromium' | 'edge' | 'firefox' | 'webkit';
   headless?: boolean;
   connection?: { type: 'cdp'; endpoint: string };
   target?: { url?: string; tabTitle?: string; index?: number };
