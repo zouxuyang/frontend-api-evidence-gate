@@ -84,11 +84,11 @@ acceptance-runner run acceptance-task.json `
 业务项目可以直接调用高层 API：
 
 ```bash
-npm install -D @frontend-api-evidence-gate/runner
+npm install -D @zouxuyang/frontend-api-evidence-gate
 ```
 
 ```ts
-import { accept } from '@frontend-api-evidence-gate/runner';
+import { accept } from '@zouxuyang/frontend-api-evidence-gate';
 
 const run = await accept({
   task,

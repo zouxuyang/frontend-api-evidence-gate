@@ -1,5 +1,5 @@
 {
-  "name": "@frontend-api-evidence-gate/runner",
+  "name": "@zouxuyang/frontend-api-evidence-gate",
   "version": "0.1.0",
   "description": "Framework-agnostic AI frontend acceptance runner with browser and API evidence.",
   "type": "module",

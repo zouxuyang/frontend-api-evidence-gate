@@ -44,7 +44,7 @@ acceptance-runner run acceptance-task.yaml \
 When the project wants to invoke the verifier directly, use the high-level API:
 
 ```ts
-import { accept } from '@frontend-api-evidence-gate/runner';
+import { accept } from '@zouxuyang/frontend-api-evidence-gate';
 
 const run = await accept({
   task,
