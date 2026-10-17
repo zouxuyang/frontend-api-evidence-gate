@@ -1,0 +1,159 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://example.invalid/schemas/acceptance-task.schema.json",
+  "title": "AcceptanceTask",
+  "type": "object",
+  "required": [
+    "taskId",
+    "taskVersion",
+    "specId",
+    "specVersion",
+    "scenarios"
+  ],
+  "properties": {
+    "specId": {
+      "type": "string"
+    },
+    "specVersion": {
+      "type": "integer",
+      "minimum": 1
+    },
+    "taskId": {
+      "type": "string"
+    },
+    "taskVersion": {
+      "type": "integer",
+      "minimum": 1
+    },
+    "browser": {
+      "type": "object",
+      "properties": {
+        "mode": {
+          "enum": [
+            "launch",
+            "existing"
+          ]
+        },
+        "browser": {
+          "enum": [
+            "chromium",
+            "firefox",
+            "webkit"
+          ]
+        },
+        "headless": {
+          "type": "boolean"
+        },
+        "connection": {
+          "type": "object",
+          "required": [
+            "type",
+            "endpoint"
+          ],
+          "properties": {
+            "type": {
+              "const": "cdp"
+            },
+            "endpoint": {
+              "type": "string",
+              "minLength": 1
+            }
+          },
+          "additionalProperties": false
+        },
+        "target": {
+          "type": "object",
+          "properties": {
+            "url": {
+              "type": "string"
+            },
+            "tabTitle": {
+              "type": "string"
+            },
+            "index": {
+              "type": "integer",
+              "minimum": 0
+            }
+          },
+          "additionalProperties": false
+        }
+      },
+      "additionalProperties": false
+    },
+    "project": {
+      "type": "object"
+    },
+    "pages": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "id",
+          "route"
+        ]
+      }
+    },
+    "apis": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "id",
+          "method",
+          "path"
+        ]
+      }
+    },
+    "scenarios": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "id",
+          "steps"
+        ]
+      }
+    },
+    "quality": {
+      "type": "object",
+      "properties": {
+        "screenshot": {
+          "enum": [
+            "required",
+            "each-step",
+            "final"
+          ]
+        },
+        "trace": {
+          "type": "boolean"
+        },
+        "consoleErrors": {
+          "enum": [
+            "ignore",
+            "warn",
+            "fail"
+          ]
+        },
+        "redactSensitiveData": {
+          "type": "boolean"
+        }
+      },
+      "additionalProperties": true
+    },
+    "data": {
+      "type": "object"
+    },
+    "components": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "id",
+          "path",
+          "impact"
+        ]
+      }
+    }
+  },
+  "additionalProperties": false
+}

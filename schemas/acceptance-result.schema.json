@@ -17,6 +17,9 @@
     "runId": {
       "type": "string"
     },
+    "taskId": {
+      "type": "string"
+    },
     "specId": {
       "type": "string"
     },
@@ -113,6 +116,12 @@
       "type": "array",
       "items": {
         "$ref": "#/$defs/response"
+      }
+    },
+    "steps": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/step"
       }
     },
     "checks": {
@@ -306,6 +315,20 @@
             "type": "string"
           }
         }
+      },
+      "additionalProperties": false
+    },
+    "step": {
+      "type": "object",
+      "required": ["stepId", "action", "status", "evidenceRefs"],
+      "properties": {
+        "stepId": { "type": "string" },
+        "action": { "type": "string" },
+        "status": { "enum": ["passed", "failed", "blocked"] },
+        "expected": {},
+        "actual": {},
+        "message": { "type": "string" },
+        "evidenceRefs": { "type": "array", "items": { "type": "string" } }
       },
       "additionalProperties": false
     }

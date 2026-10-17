@@ -4,6 +4,9 @@ export type AcceptanceDecision = 'pass' | 'fail' | 'needs_review';
 export interface AcceptanceSpec {
   specId: string;
   specVersion: number;
+  taskId?: string;
+  taskVersion?: number;
+  browser?: BrowserTarget;
   project?: { baseUrl?: string; [key: string]: unknown };
   pages?: Array<{ id: string; route: string; [key: string]: unknown }>;
   apis?: Array<{ id: string; method: string; path: string; [key: string]: unknown }>;
@@ -12,6 +15,14 @@ export interface AcceptanceSpec {
   data?: Record<string, unknown>;
   components?: ComponentSpec[];
   [key: string]: unknown;
+}
+
+export interface BrowserTarget {
+  mode?: 'launch' | 'existing';
+  browser?: 'chromium' | 'firefox' | 'webkit';
+  headless?: boolean;
+  connection?: { type: 'cdp'; endpoint: string };
+  target?: { url?: string; tabTitle?: string; index?: number };
 }
 
 export interface ComponentSpec {
@@ -64,8 +75,19 @@ export interface CheckResult {
   evidenceRefs?: string[];
 }
 
+export interface StepResult {
+  stepId: string;
+  action: string;
+  status: 'passed' | 'failed' | 'blocked';
+  expected?: unknown;
+  actual?: unknown;
+  message?: string;
+  evidenceRefs: string[];
+}
+
 export interface AcceptanceResult {
   runId: string;
+  taskId?: string;
   specId: string;
   specVersion: number;
   scenarioId: string;
@@ -77,6 +99,7 @@ export interface AcceptanceResult {
   requests: RequestEvidence[];
   responses: ResponseEvidence[];
   checks: CheckResult[];
+  steps?: StepResult[];
   findings: Array<{ id: string; severity: string; message: string; confidence?: number; evidenceRefs: string[] }>;
   aiReview?: { status: string; confidence: number; findings: AcceptanceResult['findings']; evidenceRefs: string[] };
 }

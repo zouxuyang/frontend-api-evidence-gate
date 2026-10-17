@@ -1,6 +1,6 @@
 # AI 前端验收组件
 
-一个独立的 Node.js/TypeScript 验收执行器。它接收页面、交互和 API 的标准化规格，使用真实浏览器执行场景，记录请求与响应证据，调用可插拔模型进行语义复核，最后输出后续 Agent 可以继续消费的标准结果。
+一个独立的 Node.js/TypeScript 验收执行器。外部 AI 提供页面、交互和 API 的标准化任务；本工具使用真实浏览器执行场景，记录请求与响应证据，最后输出后续 Agent 可以继续消费的标准结果。模型复核属于可选的外部扩展，不是执行器的必要依赖。
 
 ## 它解决什么问题
 
@@ -27,7 +27,7 @@ AI 生成的页面可能“看起来完成”，但仍然存在：
         ↓
 Playwright 采集页面、截图、请求、响应和 Trace
         ↓
-规则引擎判定 + 模型语义复核
+规则引擎判定
         ↓
 acceptance-result.json
         ↓
@@ -119,10 +119,10 @@ trace.zip               # Playwright 调试证据
 - `runAcceptance()`：TypeScript 库接口；
 - Playwright：浏览器执行和证据采集；
 - Ajv + JSON Schema：输入和结果协议校验；
-- `ModelAdapter`：模型调用适配器；
+- `ModelAdapter`：可选的外部模型复核适配器；
 - 指纹选择器：判断场景是否可以复用上次结果。
 
-默认 `NoopModelAdapter` 只用于本地开发。生产环境应注入实际模型适配器。
+默认不调用模型。需要语义复核时，由外部 Agent 或显式注入的 `ModelAdapter` 完成。
 
 ## 目录
 
@@ -130,4 +130,6 @@ trace.zip               # Playwright 调试证据
 - `schemas/`：输入和输出 JSON Schema
 - `examples/demo/`：通过版和问题版完整演示
 - `docs/`：总体方案、执行流程和重验策略
+- `docs/README.md`：文档索引和阅读顺序
+- `docs/01-外部AI驱动验收执行器方案.md`：外部 AI 调用协议、浏览器接入和证据输出方案
 - `templates/`：接入项目的 CI、Makefile 和规格模板
