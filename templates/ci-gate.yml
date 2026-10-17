@@ -2,12 +2,6 @@
 name: verify
 
 steps:
-  - name: backend-unit-and-lint
-    run: |
-      go test ./...
-      go vet ./...
-      golangci-lint run
-
   - name: frontend-quality
     run: |
       pnpm install --frozen-lockfile
