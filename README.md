@@ -141,7 +141,7 @@ acceptance-runner run acceptance-task.json \
   --max-response-bytes 1048576
 ```
 
-`--timeout` limits the whole batch. `--scenario-timeout` independently limits each scenario, so a large page suite can continue after one slow or blocked page and report that page separately.
+验收器采用单页模式：一次任务只能描述一个页面；同页可以有多个场景，但不能把多个路由放在同一个任务里。`--timeout` limits the whole task. `--scenario-timeout` independently limits each scenario, so the page's scenarios are reported separately when one is slow or blocked.
 
 已有登录浏览器默认采用后台隔离模式：Runner 只从目标标签页复制 cookies 和 localStorage，随后在独立的无头 Chromium 中执行场景。用户原来的标签页不会被导航、点击或抢焦点，可以继续操作。需要兼容旧行为、确实要驱动当前标签页时，显式增加 `--foreground`；这会让 Runner 占用该标签页，适合调试，不适合日常验收。
 

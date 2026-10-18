@@ -26,6 +26,7 @@ export interface RunOptions {
 }
 
 export async function runAcceptance(options: RunOptions): Promise<AcceptanceResult[]> {
+  assertSinglePageSpec(options.spec);
   const runId = `${new Date().toISOString().replace(/[:.]/g, '-')}-${Math.random().toString(36).slice(2, 8)}`;
   const results: AcceptanceResult[] = [];
   const target = options.browserTarget ?? options.spec.browser ?? { mode: 'launch' };
@@ -93,6 +94,13 @@ export async function runAcceptance(options: RunOptions): Promise<AcceptanceResu
   if (timeout) clearTimeout(timeout);
   await writeRunSummary(options.outputDir, runId, options.spec, results);
   return results;
+}
+
+function assertSinglePageSpec(spec: AcceptanceSpec) {
+  const pages = new Set(spec.scenarios.map((scenario) => String(scenario.page ?? scenario.path ?? scenario.route ?? '__unspecified_page__')));
+  if (pages.size > 1) {
+    throw new Error(`单页验收模式：一次运行只能包含一个页面，当前包含 ${pages.size} 个页面。请为每个页面生成独立的 acceptance task 后分别运行。`);
+  }
 }
 
 async function connectBrowser(target: BrowserTarget, browserName?: RunOptions['browser']): Promise<Browser> {
