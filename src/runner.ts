@@ -323,7 +323,16 @@ function matchesPayload(actual: unknown, expected: unknown, mode: unknown): bool
   if (Array.isArray(expected)) return Array.isArray(actual) && expected.every((item, index) => matchesPayload((actual as unknown[])[index], item, mode));
   return Object.entries(expected as Record<string, unknown>).every(([key, value]) => matchesPayload((actual as Record<string, unknown>)[key], value, mode));
 }
-function matchApiId(url: string, method: string, apis: Array<{ id: string; method: string; path: string }>) { const parsed = new URL(url); return apis.find((api) => api.method.toUpperCase() === method.toUpperCase() && pathMatches(parsed.pathname, api.path))?.id; }
+function matchApiId(url: string, method: string, apis: Array<{ id: string; method: string; path: string }>) {
+  const parsed = new URL(url);
+  // Match concrete paths before parameterized templates. Otherwise
+  // `/residents/overview` can be incorrectly attributed to
+  // `/residents/:id`, which makes API evidence misleading.
+  return [...apis]
+    .sort((a, b) => staticPathScore(b.path) - staticPathScore(a.path))
+    .find((api) => api.method.toUpperCase() === method.toUpperCase() && pathMatches(parsed.pathname, api.path))?.id;
+}
+function staticPathScore(path: string) { return path.split('/').filter(Boolean).reduce((score, part) => score + (part.startsWith(':') ? 0 : 1), 0); }
 function pathMatches(actual: string, template: string) { const actualParts = actual.split('/').filter(Boolean); const templateParts = template.split('/').filter(Boolean); return actualParts.length === templateParts.length && templateParts.every((part, index) => part.startsWith(':') || part === actualParts[index]); }
 async function locator(page: Page, target: Record<string, unknown>): Promise<Locator> {
   const exact = typeof target.exact === 'boolean' ? target.exact : undefined;

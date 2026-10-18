@@ -244,6 +244,10 @@
                     "waitUntil": {
                       "enum": ["load", "domcontentloaded", "networkidle"]
                     },
+                    "timeoutMs": {
+                      "type": "number",
+                      "minimum": 0
+                    },
                     "click": {
                       "type": "object"
                     },
