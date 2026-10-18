@@ -21,6 +21,8 @@ export interface BrowserTarget {
   mode?: 'launch' | 'existing';
   browser?: 'chromium' | 'edge' | 'firefox' | 'webkit';
   headless?: boolean;
+  /** Existing-tab runs are isolated in a background browser by default. */
+  background?: boolean;
   connection?: { type: 'cdp'; endpoint: string };
   target?: { url?: string; tabTitle?: string; index?: number };
 }

@@ -14,6 +14,7 @@ export interface AcceptOptions {
   tabUrl?: string;
   tabTitle?: string;
   headed?: boolean;
+  background?: boolean;
   reuse?: boolean;
   screenshotMode?: RunOptions['screenshotMode'];
   timeoutMs?: number;
@@ -38,6 +39,7 @@ export async function accept(options: AcceptOptions): Promise<AcceptanceRun> {
         ...(options.target ? { mode: options.target } : {}),
         ...(options.browser ? { browser: options.browser } : {}),
         ...(typeof options.headed === 'boolean' ? { headless: !options.headed } : {}),
+        ...(typeof options.background === 'boolean' ? { background: options.background } : {}),
         ...(options.cdpEndpoint ? { connection: { type: 'cdp' as const, endpoint: options.cdpEndpoint } } : {}),
         ...(options.tabUrl || options.tabTitle ? { target: { url: options.tabUrl, tabTitle: options.tabTitle } } : {}),
       },

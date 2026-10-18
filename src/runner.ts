@@ -20,6 +20,7 @@ export interface RunOptions {
   signal?: AbortSignal;
   timeoutMs?: number;
   maxResponseBodyBytes?: number;
+  storageState?: Parameters<Browser['newContext']>[0] extends infer T ? T extends { storageState?: infer S } ? S : never : never;
 }
 
 export async function runAcceptance(options: RunOptions): Promise<AcceptanceResult[]> {
@@ -43,9 +44,24 @@ export async function runAcceptance(options: RunOptions): Promise<AcceptanceResu
   options.signal?.addEventListener('abort', abortFromCaller, { once: true });
   if (options.signal?.aborted) abortFromCaller();
   const timeout = options.timeoutMs && options.timeoutMs > 0 ? setTimeout(() => controller.abort(new Error(`验收任务超时：${options.timeoutMs}ms`)), options.timeoutMs) : undefined;
-  const runOptions = { ...options, signal: controller.signal };
+  let runOptions: RunOptions = { ...options, signal: controller.signal };
   let browser: Browser;
-  try { browser = await connectBrowser(target, options.browser); }
+  let executionTarget = target;
+  try {
+    if (target.mode === 'existing' && target.background !== false) {
+      // Never drive the user's visible tab by default. Copy its auth state into
+      // a private headless browser and run every scenario there.
+      const attached = await connectBrowser(target, options.browser);
+      const source = await selectPage(attached, target);
+      const storageState = await source.context().storageState();
+      await attached.close();
+      browser = await chromium.launch({ headless: true });
+      runOptions = { ...runOptions, storageState };
+      executionTarget = { ...target, mode: 'launch' };
+    } else {
+      browser = await connectBrowser(target, options.browser);
+    }
+  }
   catch (error) {
     for (const item of pending) results.push(await writeBlockedResult(options, item.scenario, item.hashes, runId, item.artifactDir, error));
     options.signal?.removeEventListener('abort', abortFromCaller);
@@ -54,7 +70,7 @@ export async function runAcceptance(options: RunOptions): Promise<AcceptanceResu
     return results;
   }
   try {
-    for (const item of pending) results.push(await runScenario(browser, runOptions, item.scenario, item.hashes, runId, item.artifactDir, target));
+    for (const item of pending) results.push(await runScenario(browser, runOptions, item.scenario, item.hashes, runId, item.artifactDir, executionTarget));
   } finally {
     await browser.close();
   }
@@ -89,7 +105,7 @@ async function runScenario(browser: Browser, options: RunOptions, scenario: Scen
     if (target.mode !== 'existing') {
       // axe-core requires a context created with browser.newContext(); the
       // browser's implicit default context is not supported by its runner.
-      tracingContext = await browser.newContext();
+      tracingContext = await browser.newContext(options.storageState ? { storageState: options.storageState } : undefined);
       page = await tracingContext.newPage();
     } else {
       page = await selectPage(browser, target);

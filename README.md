@@ -140,6 +140,10 @@ acceptance-runner run acceptance-task.json \
   --max-response-bytes 1048576
 ```
 
+已有登录浏览器默认采用后台隔离模式：Runner 只从目标标签页复制 cookies 和 localStorage，随后在独立的无头 Chromium 中执行场景。用户原来的标签页不会被导航、点击或抢焦点，可以继续操作。需要兼容旧行为、确实要驱动当前标签页时，显式增加 `--foreground`；这会让 Runner 占用该标签页，适合调试，不适合日常验收。
+
+HTTP/MCP 服务同样使用这个后台隔离策略；`async: true` 只负责把任务放到后台队列，浏览器隔离由 `browserTarget.background` 控制，默认开启。
+
 外部 Agent 也可以启动本地入口：
 
 ```bash
