@@ -244,7 +244,11 @@ async function executeStep(page: Page, step: ExecutableStep, baseUrl: string, ch
   ensureActive(signal);
   const action = step.action;
   const target = step.target && typeof step.target === 'object' ? step.target as Record<string, unknown> : undefined;
-  if (action === 'open' || typeof step.open === 'string') { await page.goto(new URL(String(step.open ?? step.path ?? step.url), baseUrl || 'http://localhost').toString()); return []; }
+  if (action === 'open' || typeof step.open === 'string') {
+    const waitUntil = step.waitUntil === 'networkidle' ? 'networkidle' : step.waitUntil === 'domcontentloaded' ? 'domcontentloaded' : 'load';
+    await page.goto(new URL(String(step.open ?? step.path ?? step.url), baseUrl || 'http://localhost').toString(), { waitUntil, timeout: Number(step.timeoutMs ?? 30000) });
+    return [];
+  }
   if (action === 'attach') return [];
   if (action === 'click' || (step.click && typeof step.click === 'object')) { const targetSpec = target ?? step.click as Record<string, unknown>; await uniqueLocator(page, targetSpec, action).then((item) => item.click()); return []; }
   if (action === 'fill' || (step.fill && typeof step.fill === 'object')) { const value = (step.fill ?? step) as Record<string, unknown>; const targetSpec = target ?? value; await uniqueLocator(page, targetSpec, action).then((item) => item.fill(String(step.value ?? value.value ?? ''))); return []; }
@@ -252,7 +256,8 @@ async function executeStep(page: Page, step: ExecutableStep, baseUrl: string, ch
   if (action === 'upload') { await uniqueLocator(page, target ?? {}, action).then((item) => item.setInputFiles(String(step.file ?? step.value))); return []; }
   if (action === 'press') { await uniqueLocator(page, target ?? {}, action).then((item) => item.press(String(step.key ?? 'Enter'))); return []; }
   if (action === 'waitFor') {
-    if (target) await (await locator(page, target)).waitFor({ state: (step.state as 'attached' | 'detached' | 'visible' | 'hidden' | undefined) ?? 'visible', timeout: Number(step.timeoutMs ?? 5000) });
+    if (step.state === 'networkidle') await page.waitForLoadState('networkidle', { timeout: Number(step.timeoutMs ?? 15000) });
+    else if (target) await (await locator(page, target)).waitFor({ state: (step.state as 'attached' | 'detached' | 'visible' | 'hidden' | undefined) ?? 'visible', timeout: Number(step.timeoutMs ?? 5000) });
     else await sleepWithSignal(Number(step.timeoutMs ?? 250), signal);
     return [];
   }

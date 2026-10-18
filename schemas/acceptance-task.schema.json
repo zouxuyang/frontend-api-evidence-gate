@@ -203,11 +203,12 @@
                       ]
                     },
                     "state": {
-                      "enum": [
+                        "enum": [
                         "attached",
                         "detached",
                         "visible",
-                        "hidden"
+                          "hidden",
+                          "networkidle"
                       ]
                     }
                   },
