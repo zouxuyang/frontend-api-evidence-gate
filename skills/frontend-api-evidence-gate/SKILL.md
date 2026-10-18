@@ -16,8 +16,8 @@ Use this skill when a change needs browser and API evidence. The runner is an ex
 
 ## Workflow
 
-1. Inspect the project and locate an existing `acceptance-task.yaml` or `acceptance-spec.yaml`.
-2. Reuse it when it covers the requested change. Otherwise create a task in the project temporary/artifacts area with explicit pages, APIs, steps, and quality checks. Keep the task scoped to the changed page/component/API; do not add unrelated full-site checks unless a shared component or runtime changed.
+1. Inspect the project and locate an existing `acceptance-task.json`, `acceptance-task.yaml`, or `acceptance-spec.yaml`. JSON is the preferred interchange format when another agent is producing the task.
+2. Reuse it when it covers the requested change. Otherwise create a task in the project temporary/artifacts area with explicit pages, component definitions, APIs, interaction steps, and quality checks. Keep the task scoped to the changed page/component/API; do not add unrelated full-site checks unless a shared component or runtime changed.
 3. Before running, perform a lightweight preflight: verify the frontend URL, the configured API base or health endpoint, and (when the scenario needs it) the authenticated tab/session. If a dependency is unavailable, record `blocked` with the concrete dependency and stop before interpreting page assertions.
 4. Run the task:
 
@@ -44,6 +44,54 @@ acceptance-runner run acceptance-task.yaml \
    A Playwright locator error caused by multiple matches is an acceptance-task defect first. Fix the locator or task and rerun before changing product code.
 8. If the decision is `fail` or `needs_review` for a product reason, use the evidence to make the smallest code fix, then run the affected task again. Do not report a pass when the runner returned a blocked or failed result.
 9. Report the decision and link the evidence files. Keep secrets and session cookies out of the task file and output.
+
+## Standard JSON contract from an upstream agent
+
+The upstream agent should emit a JSON object that validates against `schemas/acceptance-task.schema.json`:
+
+```json
+{
+  "taskId": "orders-form-check",
+  "taskVersion": 1,
+  "specId": "orders-form-check",
+  "specVersion": 1,
+  "project": { "baseUrl": "https://test.example.com" },
+  "pages": [{
+    "id": "orders",
+    "path": "/orders",
+    "components": [
+      { "id": "create-button", "kind": "button", "locator": { "testId": "create-order" } },
+      { "id": "amount-field", "kind": "input", "locator": { "label": "金额" } },
+      { "id": "save-button", "kind": "button", "locator": { "role": "button", "name": "保存", "exact": true } }
+    ]
+  }],
+  "apis": [{
+    "id": "create-order",
+    "method": "POST",
+    "path": "/api/orders",
+    "status": 201
+  }],
+  "scenarios": [{
+    "id": "create-order",
+    "page": "orders",
+    "steps": [
+      { "open": "/orders", "waitUntil": "networkidle" },
+      { "action": "click", "component": "create-button" },
+      { "action": "fill", "component": "amount-field", "value": "100" },
+      { "action": "click", "component": "save-button" },
+      { "action": "assertRequest", "api": "create-order", "expected": { "method": "POST" } },
+      { "action": "assertResponse", "api": "create-order", "expected": { "status": 201 } },
+      { "action": "assertVisible", "target": { "text": "保存成功", "exact": true } },
+      { "action": "screenshot" }
+    ]
+  }],
+  "quality": { "screenshot": "each-step", "layoutOverflow": "fail", "accessibility": "axe" }
+}
+```
+
+`pages[].components` gives the agent a stable component vocabulary. A step can use `component: "save-button"` instead of repeating a selector. For every mutating button, the JSON must describe the expected request/response and the resulting UI state, such as a success message, closed dialog, or refreshed list. `waitUntil: "networkidle"` or a `waitFor` step with `state: "networkidle"` is required when the page loads data asynchronously.
+
+The runner writes `screenshot.png` and step screenshots, plus `requests.json` and `responses.json`. Request and response headers are captured with cookie, authorization, token, and other secret values redacted by default. An injected `ModelAdapter` receives the final screenshot, checks, requests, and responses so a downstream AI can judge visual layout and API semantics together; the runner itself does not pretend that an AI review happened when no adapter is supplied.
 
 ## Task authoring rules
 

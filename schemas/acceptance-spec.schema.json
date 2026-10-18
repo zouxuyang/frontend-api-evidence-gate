@@ -100,6 +100,20 @@
           },
           "path": {
             "type": "string"
+          },
+          "components": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": ["id", "kind", "locator"],
+              "properties": {
+                "id": { "type": "string", "minLength": 1 },
+                "kind": { "type": "string", "minLength": 1 },
+                "locator": { "$ref": "#/$defs/locator" },
+                "description": { "type": "string" }
+              },
+              "additionalProperties": true
+            }
           }
         },
         "oneOf": [
@@ -181,6 +195,9 @@
                     "target": {
                       "$ref": "#/$defs/locator"
                     },
+                    "component": {
+                      "type": "string"
+                    },
                     "api": {
                       "type": "string"
                     },
@@ -195,6 +212,9 @@
                     "timeoutMs": {
                       "type": "number",
                       "minimum": 0
+                    },
+                    "waitUntil": {
+                      "enum": ["load", "domcontentloaded", "networkidle"]
                     },
                     "bodyMatch": {
                       "enum": [
@@ -220,6 +240,9 @@
                   "properties": {
                     "open": {
                       "type": "string"
+                    },
+                    "waitUntil": {
+                      "enum": ["load", "domcontentloaded", "networkidle"]
                     },
                     "click": {
                       "type": "object"

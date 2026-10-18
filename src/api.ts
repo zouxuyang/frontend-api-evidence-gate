@@ -2,6 +2,7 @@ import path from 'node:path';
 import { loadSpec, normalizeSpec, stableStringify, validateSpec } from './spec.js';
 import { runAcceptance, type RunOptions } from './runner.js';
 import type { AcceptanceResult, AcceptanceSpec, BrowserTarget } from './types.js';
+import type { ModelAdapter } from './model.js';
 
 /** High-level entry point for application code and Agent integrations. */
 export interface AcceptOptions {
@@ -20,6 +21,7 @@ export interface AcceptOptions {
   timeoutMs?: number;
   maxResponseBodyBytes?: number;
   signal?: AbortSignal;
+  model?: ModelAdapter;
 }
 
 export interface AcceptanceRun {
@@ -54,6 +56,7 @@ export async function accept(options: AcceptOptions): Promise<AcceptanceRun> {
     screenshotMode: options.screenshotMode,
     timeoutMs: options.timeoutMs,
     maxResponseBodyBytes: options.maxResponseBodyBytes,
+    model: options.model,
     signal: options.signal,
     browserTarget: spec.browser,
   });

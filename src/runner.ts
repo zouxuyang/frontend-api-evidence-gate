@@ -120,7 +120,7 @@ async function runScenario(browser: Browser, options: RunOptions, scenario: Scen
       const step = normalizeStep(rawStep, steps.length + 1);
       const beforeChecks = checks.length;
       try {
-        const explicitEvidence = await executeStep(page, step, options.baseUrl ?? options.spec.project?.baseUrl ?? '', checks, requests, responses, () => captureStepScreenshot(page!, artifactDir, steps.length + 1), options.signal);
+        const explicitEvidence = await executeStep(page, step, scenario, options.spec, options.baseUrl ?? options.spec.project?.baseUrl ?? '', checks, requests, responses, () => captureStepScreenshot(page!, artifactDir, steps.length + 1), options.signal);
         const screenshot = shouldCaptureEachStep(options) ? await captureStepScreenshot(page, artifactDir, steps.length + 1) : undefined;
         steps.push({ stepId: step.id, action: step.action, status: checks.slice(beforeChecks).some((check) => check.status === 'failed') ? 'failed' : 'passed', evidenceRefs: [...explicitEvidence, ...(screenshot ? [screenshot] : [])] });
       } catch (error) {
@@ -150,7 +150,7 @@ async function runScenario(browser: Browser, options: RunOptions, scenario: Scen
     await page.screenshot({ path: screenshot, fullPage: true });
     const tracePath = options.spec.quality?.trace === false ? undefined : path.join(artifactDir, 'trace.zip');
     if (tracePath) await tracingContext.tracing.stop({ path: tracePath }).catch(() => undefined);
-    const modelReview = options.model ? await options.model.review({ spec: options.spec, scenario, checks, screenshotPath: screenshot }) : undefined;
+        const modelReview = options.model ? await options.model.review({ spec: options.spec, scenario, checks, requests, responses, screenshotPath: screenshot }) : undefined;
     const decision = checks.some((check) => check.status === 'failed') ? 'fail' : modelReview?.status === 'failed' ? 'fail' : modelReview?.status === 'needs_review' ? 'needs_review' : 'pass';
     const result: AcceptanceResult = {
       runId, taskId: options.spec.taskId, specId: options.spec.specId, specVersion: options.spec.specVersion, scenarioId: scenario.id,
@@ -240,10 +240,11 @@ function normalizeStep(raw: Record<string, unknown>, index: number): ExecutableS
   return { ...raw, id: `step-${index}`, action: legacy ?? '' };
 }
 
-async function executeStep(page: Page, step: ExecutableStep, baseUrl: string, checks: CheckResult[], requests: RequestEvidence[], responses: ResponseEvidence[], capture: () => Promise<string>, signal?: AbortSignal): Promise<string[]> {
+async function executeStep(page: Page, step: ExecutableStep, scenario: ScenarioSpec, spec: AcceptanceSpec, baseUrl: string, checks: CheckResult[], requests: RequestEvidence[], responses: ResponseEvidence[], capture: () => Promise<string>, signal?: AbortSignal): Promise<string[]> {
   ensureActive(signal);
   const action = step.action;
-  const target = step.target && typeof step.target === 'object' ? step.target as Record<string, unknown> : undefined;
+  const rawTarget = step.target && typeof step.target === 'object' ? step.target as Record<string, unknown> : undefined;
+  const target = resolveComponentTarget(rawTarget, step.component, scenario, spec);
   if (action === 'open' || typeof step.open === 'string') {
     const waitUntil = step.waitUntil === 'networkidle' ? 'networkidle' : step.waitUntil === 'domcontentloaded' ? 'domcontentloaded' : 'load';
     await page.goto(new URL(String(step.open ?? step.path ?? step.url), baseUrl || 'http://localhost').toString(), { waitUntil, timeout: Number(step.timeoutMs ?? 30000) });
@@ -269,6 +270,15 @@ async function executeStep(page: Page, step: ExecutableStep, baseUrl: string, ch
   if (action === 'assertRequest' || (step.assertRequest && typeof step.assertRequest === 'object')) { const expected = (step.expected ?? step.assertRequest) as Record<string, unknown>; const contract = step.bodyMatch ? { ...expected, bodyMatch: step.bodyMatch } : expected; const api = String(step.api ?? contract.api ?? ''); const actual = await waitFor(() => [...requests].reverse().find((request) => (request.apiId === api || request.url.includes(api)) && matchesRequest(request, contract)), 2000, signal); checks.push({ id: `assertRequest-${checks.length + 1}`, type: 'api-contract', status: actual ? 'passed' : 'failed', expected: contract, actual }); return []; }
   if (action === 'assertResponse' || (step.assertResponse && typeof step.assertResponse === 'object')) { const expected = (step.expected ?? step.assertResponse) as Record<string, unknown>; const contract = step.bodyMatch ? { ...expected, bodyMatch: step.bodyMatch } : expected; const api = String(step.api ?? contract.api ?? ''); const actual = await waitFor(() => [...responses].reverse().find((response) => (response.apiId === api || response.url?.includes(api)) && matchesResponse(response, contract, requests)), 2000, signal); checks.push({ id: `assertResponse-${checks.length + 1}`, type: 'api-response', status: actual ? 'passed' : 'failed', expected: contract, actual }); return []; }
   throw new Error(`不支持的验收动作：${JSON.stringify(step)}`);
+}
+
+function resolveComponentTarget(target: Record<string, unknown> | undefined, component: unknown, scenario: ScenarioSpec, spec: AcceptanceSpec): Record<string, unknown> | undefined {
+  const componentId = typeof component === 'string' ? component : typeof target?.component === 'string' ? String(target.component) : undefined;
+  if (!componentId) return target;
+  const page = spec.pages?.find((item) => item.id === scenario.page || item.path === scenario.page || item.route === scenario.page);
+  const item = page?.components?.find((entry) => entry.id === componentId);
+  if (!item) throw new Error(`未找到页面组件定义：page=${scenario.page ?? 'unknown'} component=${componentId}`);
+  return { ...item.locator, ...(target ?? {}) , component: undefined };
 }
 
 async function captureStepScreenshot(page: Page, artifactDir: string, index: number): Promise<string> { const relative = path.join('screenshots', `${String(index).padStart(3, '0')}-step.png`); await page.screenshot({ path: path.join(artifactDir, relative), fullPage: true }); return relative; }

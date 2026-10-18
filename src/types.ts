@@ -8,7 +8,7 @@ export interface AcceptanceSpec {
   taskVersion?: number;
   browser?: BrowserTarget;
   project?: { baseUrl?: string; [key: string]: unknown };
-  pages?: Array<{ id: string; route?: string; path?: string; [key: string]: unknown }>;
+  pages?: PageSpec[];
   apis?: Array<{ id: string; method: string; path: string; [key: string]: unknown }>;
   scenarios: ScenarioSpec[];
   quality?: Record<string, unknown>;
@@ -35,9 +35,27 @@ export interface ComponentSpec {
   [key: string]: unknown;
 }
 
+/** A page contract emitted by an upstream agent. */
+export interface PageSpec {
+  id: string;
+  route?: string;
+  path?: string;
+  components?: PageComponentSpec[];
+  [key: string]: unknown;
+}
+
+export interface PageComponentSpec {
+  id: string;
+  kind: 'button' | 'link' | 'input' | 'select' | 'form' | 'dialog' | 'table' | 'text' | 'custom' | string;
+  locator: Record<string, unknown>;
+  description?: string;
+  [key: string]: unknown;
+}
+
 export interface ScenarioSpec {
   id: string;
   page?: string;
+  component?: string;
   priority?: string;
   steps: Array<Record<string, unknown>>;
   [key: string]: unknown;

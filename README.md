@@ -182,7 +182,7 @@ PLAYWRIGHT_BROWSERS_PATH=/Volumes/1T/codex-cache/frontend-api-evidence-gate/ms-p
 
 ## 输入和输出
 
-输入文件是 `acceptance-spec.yaml`，声明：
+输入文件可以是标准 JSON（推荐供上游智能体生成），也可以是 YAML；两者都声明：
 
 - 页面和路由；
 - 按钮、输入、弹窗和可访问定位器；
@@ -190,6 +190,8 @@ PLAYWRIGHT_BROWSERS_PATH=/Volumes/1T/codex-cache/frontend-api-evidence-gate/ms-p
 - API 路径、方法、query、body 和响应要求；
 - 测试数据、视口和质量要求；
 - 页面、组件、API、schema 和全局样式依赖。
+
+JSON 任务可以在 `pages[].components` 中为按钮、输入框、选择器、表单、弹窗和表格登记稳定定位器，步骤使用 `component` 引用它们。执行器会把真实点击、输入、提交、请求和响应串起来，并把截图与 API 证据交给后续 AI 复核。
 
 输出目录包含：
 
