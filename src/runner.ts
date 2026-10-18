@@ -19,6 +19,8 @@ export interface RunOptions {
   screenshotMode?: 'final' | 'each-step';
   signal?: AbortSignal;
   timeoutMs?: number;
+  /** Maximum time allowed for each scenario. The batch timeout remains timeoutMs. */
+  scenarioTimeoutMs?: number;
   maxResponseBodyBytes?: number;
   storageState?: Parameters<Browser['newContext']>[0] extends infer T ? T extends { storageState?: infer S } ? S : never : never;
 }
@@ -70,7 +72,20 @@ export async function runAcceptance(options: RunOptions): Promise<AcceptanceResu
     return results;
   }
   try {
-    for (const item of pending) results.push(await runScenario(browser, runOptions, item.scenario, item.hashes, runId, item.artifactDir, executionTarget));
+    for (const item of pending) {
+      const scenarioController = new AbortController();
+      const relayAbort = () => scenarioController.abort(controller.signal.reason ?? new Error('验收任务已取消'));
+      controller.signal.addEventListener('abort', relayAbort, { once: true });
+      const scenarioTimeout = runOptions.scenarioTimeoutMs && runOptions.scenarioTimeoutMs > 0
+        ? setTimeout(() => scenarioController.abort(new Error(`场景验收超时：${runOptions.scenarioTimeoutMs}ms`)), runOptions.scenarioTimeoutMs)
+        : undefined;
+      try {
+        results.push(await runScenario(browser, { ...runOptions, signal: scenarioController.signal }, item.scenario, item.hashes, runId, item.artifactDir, executionTarget));
+      } finally {
+        if (scenarioTimeout) clearTimeout(scenarioTimeout);
+        controller.signal.removeEventListener('abort', relayAbort);
+      }
+    }
   } finally {
     await browser.close();
   }

@@ -19,6 +19,7 @@ export interface AcceptOptions {
   reuse?: boolean;
   screenshotMode?: RunOptions['screenshotMode'];
   timeoutMs?: number;
+  scenarioTimeoutMs?: number;
   maxResponseBodyBytes?: number;
   signal?: AbortSignal;
   model?: ModelAdapter;
@@ -55,6 +56,7 @@ export async function accept(options: AcceptOptions): Promise<AcceptanceRun> {
     reuse: options.reuse,
     screenshotMode: options.screenshotMode,
     timeoutMs: options.timeoutMs,
+    scenarioTimeoutMs: options.scenarioTimeoutMs,
     maxResponseBodyBytes: options.maxResponseBodyBytes,
     model: options.model,
     signal: options.signal,

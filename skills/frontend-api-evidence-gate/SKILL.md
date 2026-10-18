@@ -99,6 +99,7 @@ The runner writes `screenshot.png` and step screenshots, plus `requests.json` an
 - When the same accessible name is intentionally used by a tab and its submit button, scope the action (`css: "#form-up button[type=submit]"`) or add a stable test id. Do not rely on `.first()` to hide an ambiguous contract.
 - For every mutating click, add a resulting assertion: visible success/error feedback, dialog state, or an API request/response assertion. A click alone is not evidence of completion.
 - Prefer `waitFor` before asserting content that is loaded asynchronously. Use a task timeout appropriate to the real API instead of assuming the default 5 seconds.
+- For multi-page suites, distinguish the batch timeout from the per-scenario timeout: use `--timeout` for the whole run and `--scenario-timeout` for each page. A slow page must be reported independently rather than turning the rest of the suite into blocked results.
 - Declare only affected APIs in `apis`; include method, path template, relevant query/body fields, status, and a response schema when the contract matters. Avoid exact full-body equality when fields such as timestamps or generated IDs are nondeterministic.
 - When only a stable subset of a request or response body matters, set `bodyMatch: subset`; keep `exact` as the default for contracts that must match the complete body.
 - Use `quality.layoutOverflow: fail` for modal, tooltip, card, table, and responsive-layout changes; use `accessibility: axe` for shared components when the project can tolerate the extra runtime.
