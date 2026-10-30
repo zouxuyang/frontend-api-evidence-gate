@@ -120,7 +120,22 @@ async function connectBrowser(target: BrowserTarget, browserName?: RunOptions['b
   }
   const name = target.browser ?? browserName ?? 'chromium';
   const launcher = name === 'firefox' ? (await import('playwright')).firefox : name === 'webkit' ? (await import('playwright')).webkit : chromium;
-  return launcher.launch({ headless: target.headless ?? true, ...(name === 'edge' ? { channel: 'msedge' } : {}) });
+  try {
+    return await launcher.launch({ headless: target.headless ?? true, ...(name === 'edge' ? { channel: 'msedge' } : {}) });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    if (/Executable doesn't exist|browserType\.launch: Executable/i.test(message)) {
+      const browser = name === 'edge' ? 'Microsoft Edge' : name;
+      const install = name === 'edge'
+        ? '安装 Microsoft Edge，或切换到 Chromium 并运行：npx playwright install chromium'
+        : `运行：npx playwright install ${name}`;
+      throw new Error(`找不到 ${browser} 浏览器。${install}\n原始错误：${message}`);
+    }
+    if (/Host system is missing dependencies|Missing libraries/i.test(message)) {
+      throw new Error(`浏览器已安装，但当前系统缺少运行依赖。Linux 可运行：npx playwright install --with-deps ${name}（需要系统包管理权限）。\n原始错误：${message}`);
+    }
+    throw error;
+  }
 }
 
 async function runScenario(browser: Browser, options: RunOptions, scenario: ScenarioSpec, fingerprint: AcceptanceResult['fingerprint'], runId: string, artifactDir: string, target: BrowserTarget): Promise<AcceptanceResult> {

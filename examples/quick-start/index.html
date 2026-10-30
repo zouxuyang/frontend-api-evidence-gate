@@ -1,0 +1,72 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>订单验收 Quick Start</title>
+  <style>
+    body { margin: 0; background: #f3f5f7; color: #20252b; font: 16px system-ui, sans-serif; }
+    main { width: min(900px, calc(100% - 32px)); margin: 40px auto; padding: 24px; background: #fff; border: 1px solid #dfe3e8; border-radius: 6px; }
+    form { display: flex; align-items: end; gap: 12px; margin: 24px 0; }
+    label { display: grid; gap: 6px; }
+    input { min-height: 36px; padding: 0 10px; border: 1px solid #aeb6bf; border-radius: 4px; }
+    button { min-height: 38px; padding: 0 14px; border: 0; border-radius: 4px; background: #176b52; color: #fff; cursor: pointer; }
+    table { width: 100%; border-collapse: collapse; }
+    th, td { padding: 12px; border-bottom: 1px solid #e3e7eb; text-align: left; }
+    .feedback { min-height: 24px; color: #176b52; }
+    .overlay { position: fixed; inset: 0; display: grid; place-items: center; background: #17212b66; }
+    .dialog { width: min(420px, calc(100% - 48px)); padding: 24px; border-radius: 6px; background: #fff; }
+    .hidden { display: none; }
+  </style>
+</head>
+<body>
+  <main>
+    <h1>订单列表</h1>
+    <form id="search">
+      <label>搜索订单<input id="keyword" aria-label="搜索订单"></label>
+      <button type="submit">搜索</button>
+    </form>
+    <p id="feedback" class="feedback" role="status"></p>
+    <table>
+      <thead><tr><th>订单号</th><th>状态</th><th>金额</th><th>操作</th></tr></thead>
+      <tbody id="rows"></tbody>
+    </table>
+  </main>
+  <div id="overlay" class="overlay hidden">
+    <section class="dialog" role="dialog" aria-modal="true" aria-labelledby="dialog-title">
+      <h2 id="dialog-title">编辑订单</h2>
+      <label>备注<input id="remark" aria-label="备注"></label>
+      <p><button id="save" type="button">保存</button> <button id="close" type="button">关闭</button></p>
+    </section>
+  </div>
+  <script>
+    let currentId = '';
+    const byId = (id) => document.getElementById(id);
+    async function loadOrders() {
+      const query = new URLSearchParams({ page: '1', pageSize: '20', keyword: byId('keyword').value });
+      const response = await fetch(`/api/orders?${query}`);
+      const data = await response.json();
+      byId('rows').innerHTML = data.items.map((order) => `<tr><td>${order.orderNo}</td><td>${order.status}</td><td>${order.amount}</td><td><button class="edit" data-id="${order.id}" type="button">编辑</button></td></tr>`).join('');
+      document.querySelectorAll('.edit').forEach((button) => button.addEventListener('click', () => {
+        currentId = button.dataset.id;
+        byId('remark').value = '';
+        byId('overlay').classList.remove('hidden');
+      }));
+    }
+    byId('search').addEventListener('submit', (event) => { event.preventDefault(); loadOrders(); });
+    byId('close').addEventListener('click', () => byId('overlay').classList.add('hidden'));
+    byId('save').addEventListener('click', async () => {
+      const response = await fetch(`/api/orders/${currentId}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ remark: byId('remark').value }),
+      });
+      if (response.ok) {
+        byId('overlay').classList.add('hidden');
+        byId('feedback').textContent = '保存成功';
+      }
+    });
+    loadOrders();
+  </script>
+</body>
+</html>

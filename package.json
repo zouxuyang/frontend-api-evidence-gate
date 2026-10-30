@@ -13,7 +13,8 @@
   "files": [
     "dist",
     "schemas",
-    "skills"
+    "skills",
+    "examples/quick-start"
   ],
   "scripts": {
     "build": "tsc -p tsconfig.json",

@@ -36,7 +36,64 @@ acceptance-result.json
 后续 Agent 修复、继续开发或确认通过
 ```
 
-## 快速开始
+## 环境要求
+
+- Node.js 20 或更高版本；npm 随 Node.js 一起安装。
+- 默认浏览器是 Playwright Chromium。安装 npm 包不会自动下载浏览器，首次运行前需要单独安装一次。
+- Linux 可能需要系统级浏览器依赖；安装系统依赖需要当前机器具备相应包管理权限。
+- 使用 `--browser edge` 时，机器上必须已安装 Microsoft Edge。
+- 本工具不需要 Python 或 PyYAML；YAML 解析由 npm 依赖 `yaml` 提供。JSON 和 YAML 均可作为任务输入。
+
+## npm 首次使用
+
+在需要验收的前端项目目录运行：
+
+```bash
+npm install -D @zouxuyang/frontend-api-evidence-gate
+npx playwright install chromium
+npx acceptance-runner plan node_modules/@zouxuyang/frontend-api-evidence-gate/examples/quick-start/acceptance-task.json
+```
+
+Windows PowerShell 使用相同步骤，任务路径改用反斜杠：
+
+```powershell
+npm install -D @zouxuyang/frontend-api-evidence-gate
+npx playwright install chromium
+npx acceptance-runner plan .\node_modules\@zouxuyang\frontend-api-evidence-gate\examples\quick-start\acceptance-task.json
+```
+
+这三步分别安装执行器、下载 Chromium，并预览随包提供的验收任务。浏览器只需按 Playwright 版本安装一次；包升级后如果提示找不到浏览器，再运行一次安装命令。无需设置 `PLAYWRIGHT_BROWSERS_PATH`，Playwright 会使用当前用户的默认浏览器缓存目录。需要统一管理缓存时，可在安装和运行时设置同一个 `PLAYWRIGHT_BROWSERS_PATH`。
+
+Linux 缺少系统共享库时，可安装浏览器和系统依赖：
+
+```bash
+npx playwright install --with-deps chromium
+```
+
+这个命令可能需要 `sudo` 或管理员权限。也可以由系统管理员按 Playwright 官方支持的发行版安装依赖。若使用已有的 Edge 浏览器，则需自行安装 Edge，并将任务浏览器设为 `edge`；这种方式不会下载 Playwright Chromium。
+
+### 跑通随包示例
+
+在项目目录打开两个终端。终端一启动示例页面和 API：
+
+```bash
+node node_modules/@zouxuyang/frontend-api-evidence-gate/examples/quick-start/server.mjs
+```
+
+终端二执行浏览器验收：
+
+```bash
+npx acceptance-runner run node_modules/@zouxuyang/frontend-api-evidence-gate/examples/quick-start/acceptance-task.json \
+  --output ./artifacts/acceptance-quick-start
+```
+
+预期结论为 `pass`。任务、页面和 API 服务源码位于 npm 包的 `examples/quick-start/`。`plan` 只校验并展示执行计划，不需要浏览器；`run` 才会启动浏览器并采集证据。
+
+如果只需在项目代码中调用，不需要安装 Codex Skill。安装 npm 包不会自动注册 Codex Skill；需要 Agent 自动识别并按本项目验收流程工作时，再把 `node_modules/@zouxuyang/frontend-api-evidence-gate/skills/frontend-api-evidence-gate` 目录复制到 `$CODEX_HOME/skills/frontend-api-evidence-gate`（未设置 `CODEX_HOME` 时通常是 `~/.codex/skills/frontend-api-evidence-gate`；Windows 默认是 `%USERPROFILE%\.codex\skills\frontend-api-evidence-gate`），然后重启 Codex。
+
+## 源码仓库开发
+
+以下命令用于开发本仓库，不是 npm 使用者的安装步骤：
 
 ```bash
 npm install
@@ -109,13 +166,7 @@ acceptance-runner run acceptance-task.json `
 
 `--browser edge` 使用系统安装的 Microsoft Edge，不会下载 Playwright 自带浏览器。Windows 下可使用 PowerShell 或 `acceptance-runner.cmd`。
 
-### 作为 npm 包和 Codex Skill 使用
-
-业务项目可以直接调用高层 API：
-
-```bash
-npm install -D @zouxuyang/frontend-api-evidence-gate
-```
+### TypeScript API 和视觉模型适配器
 
 ```ts
 import { accept } from '@zouxuyang/frontend-api-evidence-gate';
@@ -134,7 +185,9 @@ console.log(run.results[0].quality?.visualReview);
 
 每个场景可指定 `viewport: { width, height }`。结果同时保留 `screenshot.png`（整页）和 `viewport.png`（真实可视区域），`quality.layoutOverflow: fail` 会额外检查页面横向溢出、打开的弹窗／抽屉是否越出视口、底部操作区是否可见，以及正文和底部操作区是否重叠，并写入 `layout.json`。模型适配器收到视口截图、整页截图、各步骤截图、布局测量、固定六项视觉规则、行为检查和 API 证据。配色、品牌方向等审美选择由产品负责人决定。
 
-发布包同时包含 `skills/frontend-api-evidence-gate/SKILL.md`。将该文件安装到 Codex 的 skills 目录后，Agent 会在页面、表单或 API 改动时自动生成任务、运行验收、读取证据并重验。MCP 服务仍可通过 `acceptance-runner-server` 提供给其他 Agent。
+`ModelAdapter` 是可选集成：只有需要自动化视觉结论时才需要由调用方实现并注入。没有适配器时，行为/API检查照常执行，视觉状态按策略记录为 `not_run` 或 `needs_review`，不会伪报视觉通过。MCP 服务可通过 `acceptance-runner-server` 提供给其他 Agent。
+
+npm 包包含 `skills/frontend-api-evidence-gate/SKILL.md` 和 quick-start 示例，但 npm 不会自动把 Skill 写入 Codex 配置目录。需要 Agent 工作流时，按“npm 首次使用”章节手动安装 Skill；只把执行器集成进代码或 CI 时，不需要安装 Skill。
 
 目标模式和运行保护：
 
@@ -243,6 +296,7 @@ trace.zip               # Playwright 调试证据
 - `src/`：执行器实现
 - `schemas/`：输入和输出 JSON Schema
 - `examples/demo/`：通过版和问题版完整演示
+- `examples/quick-start/`：随 npm 发布的 JSON 任务及可运行页面/API 示例
 - `docs/`：总体方案、执行流程和重验策略
 - `docs/README.md`：文档索引和阅读顺序
 - `docs/01-外部AI驱动验收执行器方案.md`：外部 AI 调用协议、浏览器接入和证据输出方案

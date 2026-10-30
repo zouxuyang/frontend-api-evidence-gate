@@ -1,0 +1,139 @@
+{
+  "taskId": "quick-start-orders",
+  "taskVersion": 1,
+  "specId": "quick-start-orders",
+  "specVersion": 1,
+  "project": {
+    "baseUrl": "http://127.0.0.1:4173"
+  },
+  "pages": [
+    {
+      "id": "orders",
+      "path": "/"
+    }
+  ],
+  "apis": [
+    {
+      "id": "list-orders",
+      "method": "GET",
+      "path": "/api/orders"
+    },
+    {
+      "id": "update-order",
+      "method": "PATCH",
+      "path": "/api/orders/:id"
+    }
+  ],
+  "scenarios": [
+    {
+      "id": "search-and-edit-order",
+      "page": "orders",
+      "viewport": {
+        "width": 1280,
+        "height": 800
+      },
+      "steps": [
+        {
+          "action": "open",
+          "path": "/",
+          "waitUntil": "networkidle"
+        },
+        {
+          "action": "fill",
+          "target": {
+            "label": "搜索订单"
+          },
+          "value": "ORD-001"
+        },
+        {
+          "action": "click",
+          "target": {
+            "role": "button",
+            "name": "搜索",
+            "exact": true
+          }
+        },
+        {
+          "action": "assertRequest",
+          "api": "list-orders",
+          "expected": {
+            "method": "GET",
+            "query": {
+              "page": 1,
+              "pageSize": 20,
+              "keyword": "ORD-001"
+            }
+          }
+        },
+        {
+          "action": "assertResponse",
+          "api": "list-orders",
+          "expected": {
+            "status": 200,
+            "query": {
+              "keyword": "ORD-001"
+            }
+          }
+        },
+        {
+          "action": "click",
+          "target": {
+            "role": "button",
+            "name": "编辑",
+            "exact": true
+          }
+        },
+        {
+          "action": "assertVisible",
+          "target": {
+            "role": "dialog"
+          }
+        },
+        {
+          "action": "fill",
+          "target": {
+            "label": "备注"
+          },
+          "value": "由 quick-start 更新"
+        },
+        {
+          "action": "click",
+          "target": {
+            "role": "button",
+            "name": "保存",
+            "exact": true
+          }
+        },
+        {
+          "action": "assertRequest",
+          "api": "update-order",
+          "expected": {
+            "method": "PATCH",
+            "body": {
+              "remark": "由 quick-start 更新"
+            }
+          }
+        },
+        {
+          "action": "assertResponse",
+          "api": "update-order",
+          "expected": {
+            "status": 200
+          }
+        },
+        {
+          "action": "assertVisible",
+          "target": {
+            "text": "保存成功",
+            "exact": true
+          }
+        }
+      ]
+    }
+  ],
+  "quality": {
+    "screenshot": "required",
+    "layoutOverflow": "fail",
+    "visualReview": "off"
+  }
+}
