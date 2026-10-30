@@ -1,6 +1,6 @@
 {
   "name": "@zouxuyang/frontend-api-evidence-gate",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Framework-agnostic AI frontend acceptance runner with browser and API evidence.",
   "type": "module",
   "bin": {
