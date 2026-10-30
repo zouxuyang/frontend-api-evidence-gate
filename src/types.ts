@@ -1,5 +1,7 @@
 export type AcceptanceStatus = 'passed' | 'failed' | 'blocked' | 'reused' | 'skipped';
 export type AcceptanceDecision = 'pass' | 'fail' | 'needs_review';
+export type VisualReviewPolicy = 'required' | 'optional' | 'off';
+export type VisualReviewStatus = 'passed' | 'failed' | 'needs_review' | 'not_run' | 'blocked';
 
 export interface AcceptanceSpec {
   specId: string;
@@ -11,7 +13,10 @@ export interface AcceptanceSpec {
   pages?: PageSpec[];
   apis?: Array<{ id: string; method: string; path: string; [key: string]: unknown }>;
   scenarios: ScenarioSpec[];
-  quality?: Record<string, unknown>;
+  quality?: {
+    visualReview?: VisualReviewPolicy;
+    [key: string]: unknown;
+  };
   data?: Record<string, unknown>;
   components?: ComponentSpec[];
   [key: string]: unknown;
@@ -57,6 +62,7 @@ export interface ScenarioSpec {
   page?: string;
   component?: string;
   priority?: string;
+  viewport?: { width: number; height: number };
   steps: Array<Record<string, unknown>>;
   [key: string]: unknown;
 }
@@ -115,11 +121,27 @@ export interface AcceptanceResult {
   decision: AcceptanceDecision;
   fingerprint: { scenarioHash: string; specHash: string; contentHash?: string; semanticHash?: string; dependencyHashes?: Record<string, string> };
   reusedFrom: string | null;
-  evidence: { screenshot: string; screenshots?: string[]; trace?: string; checks: string; requests: string; responses: string; console?: string; axe?: string };
+  evidence: { screenshot: string; viewportScreenshot?: string; screenshots?: string[]; trace?: string; checks: string; requests: string; responses: string; console?: string; axe?: string; layout?: string };
   requests: RequestEvidence[];
   responses: ResponseEvidence[];
   checks: CheckResult[];
   steps?: StepResult[];
   findings: Array<{ id: string; severity: string; message: string; confidence?: number; evidenceRefs: string[] }>;
-  aiReview?: { status: string; confidence: number; findings: AcceptanceResult['findings']; evidenceRefs: string[] };
+  quality?: {
+    visualReview: {
+      policy: VisualReviewPolicy;
+      status: VisualReviewStatus;
+      confidence?: number;
+      criteria?: Array<{ id: string; status: 'passed' | 'failed' | 'not_observable' | 'not_applicable'; rationale: string; evidenceRefs: string[] }>;
+      findings: AcceptanceResult['findings'];
+      evidenceRefs: string[];
+    };
+  };
+  aiReview?: {
+    status: string;
+    confidence: number;
+    findings: AcceptanceResult['findings'];
+    evidenceRefs: string[];
+    criteria?: Array<{ id: string; status: 'passed' | 'failed' | 'not_observable' | 'not_applicable'; rationale: string; evidenceRefs: string[] }>;
+  };
 }

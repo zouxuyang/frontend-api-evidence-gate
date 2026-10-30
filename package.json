@@ -23,6 +23,9 @@
     "debug:server": "node --inspect=9230 dist/server.js",
     "prepack": "npm run build",
     "check": "tsc -p tsconfig.json --noEmit",
+    "test": "npm run test:unit && npm run test:browser",
+    "test:unit": "npm run build && node --test --test-name-pattern='^(layout rules|visual review cannot|spec schemas)' tests/*.test.mjs",
+    "test:browser": "npm run build && node --test --test-name-pattern='^browser layout metrics' tests/*.test.mjs",
     "plan": "node dist/cli.js plan",
     "acceptance": "node dist/cli.js run"
   },

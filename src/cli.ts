@@ -35,5 +35,5 @@ try {
   const browserTarget = targetMode || browser ? { mode: (targetMode ?? 'launch') as 'launch' | 'existing', browser: browser as 'chromium' | 'edge' | 'firefox' | 'webkit' | undefined, headless: !headed, background: !foreground, connection: targetMode === 'existing' && cdpEndpoint ? { type: 'cdp' as const, endpoint: cdpEndpoint } : undefined, target: tabUrl || tabTitle ? { url: tabUrl, tabTitle } : undefined } : undefined;
   const results = await runAcceptance({ spec, normalizedSpec: normalized, outputDir: path.resolve(outputDir), reuse, browserTarget, timeoutMs, scenarioTimeoutMs, maxResponseBodyBytes });
   console.log(JSON.stringify({ specId: spec.specId, total: results.length, pass: results.filter((r) => r.decision === 'pass').length, fail: results.filter((r) => r.decision === 'fail').length, needsReview: results.filter((r) => r.decision === 'needs_review').length, results }, null, 2));
-  process.exit(results.some((result) => result.decision === 'fail' || result.status === 'blocked') ? 1 : results.some((result) => result.decision === 'needs_review') ? 2 : 0);
+  process.exit(results.some((result) => result.decision === 'fail') ? 1 : results.some((result) => result.decision === 'needs_review' || result.status === 'blocked') ? 2 : 0);
 } catch (error) { console.error(error instanceof Error ? error.message : error); process.exit(1); }

@@ -160,6 +160,15 @@
           "priority": {
             "type": "string"
           },
+          "viewport": {
+            "type": "object",
+            "required": ["width", "height"],
+            "properties": {
+              "width": { "type": "integer", "minimum": 1, "maximum": 10000 },
+              "height": { "type": "integer", "minimum": 1, "maximum": 10000 }
+            },
+            "additionalProperties": false
+          },
           "steps": {
             "type": "array",
             "items": {
@@ -307,6 +316,9 @@
             "fail",
             "axe"
           ]
+        },
+        "visualReview": {
+          "enum": ["required", "optional", "off"]
         }
       },
       "additionalProperties": true

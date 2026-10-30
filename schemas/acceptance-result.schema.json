@@ -89,6 +89,9 @@
         "screenshot": {
           "type": "string"
         },
+        "viewportScreenshot": {
+          "type": "string"
+        },
         "screenshots": {
           "type": "array",
           "items": {
@@ -111,6 +114,9 @@
           "type": "string"
         },
         "axe": {
+          "type": "string"
+        },
+        "layout": {
           "type": "string"
         }
       },
@@ -211,6 +217,30 @@
           "items": {
             "type": "string"
           }
+        },
+        "criteria": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/visualCriterion" }
+        }
+      },
+      "additionalProperties": false
+    },
+    "quality": {
+      "type": "object",
+      "required": ["visualReview"],
+      "properties": {
+        "visualReview": {
+          "type": "object",
+          "required": ["policy", "status", "findings", "evidenceRefs"],
+          "properties": {
+            "policy": { "enum": ["required", "optional", "off"] },
+            "status": { "enum": ["passed", "failed", "needs_review", "not_run", "blocked"] },
+            "confidence": { "type": "number", "minimum": 0, "maximum": 1 },
+            "criteria": { "type": "array", "items": { "$ref": "#/$defs/visualCriterion" } },
+            "findings": { "type": "array", "items": { "$ref": "#/$defs/finding" } },
+            "evidenceRefs": { "type": "array", "items": { "type": "string" } }
+          },
+          "additionalProperties": false
         }
       },
       "additionalProperties": false
@@ -325,6 +355,17 @@
             "type": "string"
           }
         }
+      },
+      "additionalProperties": false
+    },
+    "visualCriterion": {
+      "type": "object",
+      "required": ["id", "status", "rationale", "evidenceRefs"],
+      "properties": {
+        "id": { "type": "string" },
+        "status": { "enum": ["passed", "failed", "not_observable", "not_applicable"] },
+        "rationale": { "type": "string" },
+        "evidenceRefs": { "type": "array", "items": { "type": "string" } }
       },
       "additionalProperties": false
     },

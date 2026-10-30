@@ -4,12 +4,14 @@ import { fileURLToPath } from 'node:url';
 import path from 'node:path';
 import { normalizeSpec, stableStringify, validateSpec } from './spec.js';
 import { runAcceptance, type RunOptions } from './runner.js';
+import type { ModelAdapter } from './model.js';
 import type { AcceptanceSpec } from './types.js';
 
 export interface AcceptanceServerOptions {
   host?: string;
   port?: number;
   outputDir?: string;
+  model?: ModelAdapter;
 }
 
 const jobs = new Map<string, { controller: AbortController; status: 'running' | 'completed' | 'failed' | 'cancelled'; result?: unknown; error?: string }>();
@@ -64,7 +66,8 @@ async function runPayload(payload: Record<string, unknown>, options: AcceptanceS
     maxResponseBodyBytes: numberValue(runOptions.maxResponseBodyBytes ?? payload.maxResponseBodyBytes),
     signal,
     screenshotMode: runOptions.screenshotMode ?? (payload.screenshotMode as RunOptions['screenshotMode']),
-    browserTarget: runOptions.browserTarget ?? spec.browser
+    browserTarget: runOptions.browserTarget ?? spec.browser,
+    model: options.model,
   });
   return { taskId: spec.taskId, specId: spec.specId, results };
   } finally { activeRuns -= 1; }
@@ -81,7 +84,7 @@ async function handleMcp(payload: Record<string, unknown>, response: ServerRespo
     const task = args.task as AcceptanceSpec;
     const spec = normalizeSpec(task);
     await validateSpec(spec);
-    const results = await runAcceptance({ spec, normalizedSpec: stableStringify(spec), outputDir: path.resolve(String(args.outputDir ?? options.outputDir ?? process.env.ACCEPTANCE_OUTPUT_DIR ?? './artifacts')), timeoutMs: numberValue(args.timeoutMs), maxResponseBodyBytes: numberValue(args.maxResponseBodyBytes), browserTarget: spec.browser });
+    const results = await runAcceptance({ spec, normalizedSpec: stableStringify(spec), outputDir: path.resolve(String(args.outputDir ?? options.outputDir ?? process.env.ACCEPTANCE_OUTPUT_DIR ?? './artifacts')), timeoutMs: numberValue(args.timeoutMs), maxResponseBodyBytes: numberValue(args.maxResponseBodyBytes), browserTarget: spec.browser, model: options.model });
     return sendJson(response, 200, { jsonrpc: '2.0', id, result: { content: [{ type: 'text', text: JSON.stringify({ taskId: spec.taskId, specId: spec.specId, results }) }] } });
   } catch (error) {
     return sendJson(response, 200, { jsonrpc: '2.0', id, error: { code: -32000, message: error instanceof Error ? error.message : String(error) } });

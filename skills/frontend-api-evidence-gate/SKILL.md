@@ -1,11 +1,6 @@
 ---
 name: frontend-api-evidence-gate
-description: Drive the frontend API evidence gate during AI development. Generate structured acceptance tasks, run real browser checks, inspect screenshots and request/response evidence, then fix and re-run failed scenarios.
-read_when:
-  - Modifying a frontend page, component, form, button, or interaction
-  - Changing frontend API requests or response handling
-  - Verifying a page in an already logged-in Chrome or Edge tab
-  - The user asks for screenshots, API evidence, or an acceptance conclusion
+description: Verify frontend pages, components, forms, interactions, and API requests with structured browser evidence. Inspect screenshots and request/response results, apply an explicit visual quality rubric, and fix confirmed failures.
 metadata: {"requires":{"bins":["acceptance-runner"]}}
 allowed-tools: Bash(acceptance-runner:*)
 ---
@@ -36,14 +31,36 @@ acceptance-runner run acceptance-task.yaml \
   --output artifacts/acceptance
 ```
 
-6. Read the returned decision and inspect `acceptance-result.json`, `checks.json`, `requests.json`, `responses.json`, `console.json`, screenshots, and `axe.json` when present.
-7. If the decision is `fail` or `needs_review`, classify the cause before changing code:
+6. Read the returned decision and inspect `acceptance-result.json`, `checks.json`, `requests.json`, `responses.json`, `console.json`, screenshots, `layout.json`, and `axe.json` when present.
+7. For UI changes, complete the visual quality gate below. A screenshot being present, `layoutOverflow` passing, or the runner returning `pass` does not by itself mean visual review passed.
+8. If the decision is `fail` or `needs_review`, classify the cause before changing code:
    - `blocked`: environment, browser, authentication, or dependency unavailable;
    - `fail`: deterministic assertion, layout, accessibility, request, or response mismatch;
    - `needs_review`: evidence exists but requires human/semantic judgment.
    A Playwright locator error caused by multiple matches is an acceptance-task defect first. Fix the locator or task and rerun before changing product code.
-8. If the decision is `fail` or `needs_review` for a product reason, use the evidence to make the smallest code fix, then run the affected task again. Do not report a pass when the runner returned a blocked or failed result.
-9. Report the decision and link the evidence files. Keep secrets and session cookies out of the task file and output.
+9. If `fail` or `needs_review` for a product reason, use the evidence to make the smallest code fix, then refresh and inspect affected evidence. Do not report a pass when the runner returned a blocked or failed result.
+10. Report API/behavior, accessibility, and visual decisions separately; link the evidence. Keep secrets and session cookies out of the task file and output.
+
+## Visual quality gate
+
+Apply this gate to every changed page, dialog, drawer, and materially changed state. Keep it scoped to the changed surface; expand to sibling screens when a shared component or style changed. Inspect actual screenshots at full resolution, not only a contact sheet. Capture relevant states and representative supported viewports. If needed evidence is absent, capture it in the browser before deciding. Use `scenario.viewport` for deterministic viewport coverage; declare desktop and narrow-screen viewports as separate scenarios when both are supported and affected.
+
+Judge observable usability and layout against these criteria. Record each as `pass`, `fail`, `not observable`, or `not applicable`, with screenshot or browser-measurement evidence. Use `not applicable` only when the criterion truly does not apply to the product or changed surface, and state why.
+
+| Criterion | Fail when | Passing evidence |
+| --- | --- | --- |
+| Content fit | Text, labels, controls, validation messages, or results are clipped, obscured, overlapping, or outside their intended container. | All content fits or is reachable through intentional scrolling; no accidental page-level horizontal overflow. |
+| Dialog and drawer structure | Title/context is missing; body is trapped behind a footer; close/cancel is unavailable; or primary action is obscured or detached from its form. | Title/context, body, and actions have distinct regions; scrolling content does not cover actions. |
+| Task order and grouping | Users must guess which fields belong together, visual order conflicts with task sequence, or an action appears to submit the wrong group. | Related fields/results are grouped, labels adjoin controls, and actions follow the content they affect. |
+| Control readability | Labels/values truncate without a way to inspect them; controls lack visible labels or accessible names; important states cannot be distinguished; or long text breaks layout. | Labels, values, controls, and state changes can be identified and read. Use axe output when configured. |
+| Alignment and spacing | Same-level controls/sections are inconsistently aligned or spaced so grouping or action ownership becomes unclear. | Repeated controls align consistently; spacing communicates hierarchy and follows established project patterns. |
+| Responsive behavior | At a supported narrow viewport controls overlap, become unusable, force unintended horizontal scrolling, or fixed actions cover required content. | Workflow remains operable; wrapping/stacking is intentional and actions remain reachable. |
+
+The runner's deterministic layout check covers document horizontal overflow and active modal/drawer bounds, footer visibility, and body/footer overlap. It writes measurements to `layout.json`. This does not detect every text-clipping or visual-hierarchy issue; inspect screenshots and use the visual rubric as well. A concrete rubric violation is a visual failure even when automated interaction checks pass. Missing evidence is `not observable`, never a pass.
+
+Keep objective findings separate from aesthetic preference. Brand direction, color taste, decorative style, and whether a composition feels elegant have no universal threshold; leave those preferences to the user. Do not ask users to judge clipping, overlap, unreadable text, inaccessible actions, or broken responsive behavior.
+
+The final result must state separate outcomes for behavior/API, accessibility, and visual quality. Visual review is `pass` only when every applicable rubric criterion is evidenced as passing; any failed criterion is `fail`; missing required evidence or criteria is `incomplete`. Do not summarize a behavior-only pass as an overall UI pass.
 
 ## Standard JSON contract from an upstream agent
 
@@ -74,6 +91,7 @@ The upstream agent should emit a JSON object that validates against `schemas/acc
   "scenarios": [{
     "id": "create-order",
     "page": "orders",
+    "viewport": { "width": 1440, "height": 900 },
     "steps": [
       { "open": "/orders", "waitUntil": "networkidle" },
       { "action": "click", "component": "create-button" },
@@ -85,13 +103,13 @@ The upstream agent should emit a JSON object that validates against `schemas/acc
       { "action": "screenshot" }
     ]
   }],
-  "quality": { "screenshot": "each-step", "layoutOverflow": "fail", "accessibility": "axe" }
+  "quality": { "screenshot": "each-step", "layoutOverflow": "fail", "accessibility": "axe", "visualReview": "required" }
 }
 ```
 
 `pages[].components` gives the agent a stable component vocabulary. A step can use `component: "save-button"` instead of repeating a selector. For every mutating button, the JSON must describe the expected request/response and the resulting UI state, such as a success message, closed dialog, or refreshed list. `waitUntil: "networkidle"` or a `waitFor` step with `state: "networkidle"` is required when the page loads data asynchronously.
 
-The runner writes `screenshot.png` and step screenshots, plus `requests.json` and `responses.json`. Request and response headers are captured with cookie, authorization, token, and other secret values redacted by default. An injected `ModelAdapter` receives the final screenshot, checks, requests, and responses so a downstream AI can judge visual layout and API semantics together; the runner itself does not pretend that an AI review happened when no adapter is supplied.
+The runner writes `screenshot.png` (full page), `viewport.png` (the actual browser viewport), step screenshots, and `layout.json`, plus request/response evidence. Sensitive request/response fields remain redacted by default. An injected `ModelAdapter` receives both screenshots, viewport and layout measurements, the fixed rubric, checks, requests, and responses. If `visualReview` is `required` but no adapter is supplied, the result is `needs_review`; if it is `optional`, the result explicitly records `not_run` and does not claim visual approval. A model review only passes when it returns evidence-backed passing results for all six rubric criteria. `NoopModelAdapter` returns blocked and cannot manufacture a pass.
 
 ## Task authoring rules
 
@@ -103,6 +121,7 @@ The runner writes `screenshot.png` and step screenshots, plus `requests.json` an
 - Declare only affected APIs in `apis`; include method, path template, relevant query/body fields, status, and a response schema when the contract matters. Avoid exact full-body equality when fields such as timestamps or generated IDs are nondeterministic.
 - When only a stable subset of a request or response body matters, set `bodyMatch: subset`; keep `exact` as the default for contracts that must match the complete body.
 - Use `quality.layoutOverflow: fail` for modal, tooltip, card, table, and responsive-layout changes; use `accessibility: axe` for shared components when the project can tolerate the extra runtime.
+- For a UI change that needs a visual conclusion, set `quality.visualReview: required` and provide an evidence-producing `ModelAdapter`; if using CLI without an adapter, expect `needs_review`, inspect screenshots against the rubric, and report the visual result separately. Use separate `scenario.viewport` cases for each affected supported viewport.
 - Use `--reuse` only when the scenario fingerprint includes the changed files/configuration and the same browser/auth/environment. After a product change, delete or invalidate stale `latest` results rather than treating reuse as a fresh pass.
 - Never place passwords, cookies, bearer tokens, database URLs, or real personal data in YAML, screenshots, request bodies, or committed artifacts. Use the runner's redaction and local bootstrap fixtures.
 

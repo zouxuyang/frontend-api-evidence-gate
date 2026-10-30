@@ -1,6 +1,6 @@
 # AI 前端验收组件
 
-一个独立的 Node.js/TypeScript 验收执行器。外部 AI 提供页面、交互和 API 的标准化任务；本工具使用真实浏览器执行场景，记录请求与响应证据，最后输出后续 Agent 可以继续消费的标准结果。模型复核属于可选的外部扩展，不是执行器的必要依赖。
+一个独立的 Node.js/TypeScript 验收执行器。外部 Agent 提供页面、交互和 API 的标准化任务；本工具使用真实浏览器执行场景，记录请求与响应证据，并运行可确定判定的布局规则。视觉模型复核通过外部 `ModelAdapter` 接入，不内置或隐式调用模型。
 
 ## 它解决什么问题
 
@@ -27,7 +27,9 @@ AI 生成的页面可能“看起来完成”，但仍然存在：
         ↓
 Playwright 采集页面、截图、请求、响应和 Trace
         ↓
-规则引擎判定
+确定性行为、API、布局与可访问性规则
+        ↓
+可选的、按固定规则执行的视觉模型复核
         ↓
 acceptance-result.json
         ↓
@@ -125,7 +127,12 @@ const run = await accept({
 });
 
 if (run.decision !== 'pass') throw new Error(`验收未通过：${run.decision}`);
+console.log(run.results[0].quality?.visualReview);
 ```
+
+`quality.visualReview` 可设为 `required`、`optional` 或 `off`。未显式配置时按 `optional` 处理，以保持旧任务兼容：没有适配器时行为/API可以通过，但视觉状态会明确记录为 `not_run`。设为 `required` 却未提供适配器时，场景结论为 `needs_review`；提供适配器也必须返回全部视觉规则的逐项证据，缺项不能通过。`off` 会跳过模型复核。不要把行为/API通过解释为视觉通过。
+
+每个场景可指定 `viewport: { width, height }`。结果同时保留 `screenshot.png`（整页）和 `viewport.png`（真实可视区域），`quality.layoutOverflow: fail` 会额外检查页面横向溢出、打开的弹窗／抽屉是否越出视口、底部操作区是否可见，以及正文和底部操作区是否重叠，并写入 `layout.json`。模型适配器收到视口截图、整页截图、各步骤截图、布局测量、固定六项视觉规则、行为检查和 API 证据。配色、品牌方向等审美选择由产品负责人决定。
 
 发布包同时包含 `skills/frontend-api-evidence-gate/SKILL.md`。将该文件安装到 Codex 的 skills 目录后，Agent 会在页面、表单或 API 改动时自动生成任务、运行验收、读取证据并重验。MCP 服务仍可通过 `acceptance-runner-server` 提供给其他 Agent。
 
@@ -200,7 +207,9 @@ JSON 任务可以在 `pages[].components` 中为按钮、输入框、选择器�
 
 ```text
 acceptance-result.json  # 标准结果、结论、指纹和证据索引
-screenshot.png          # 最终页面截图
+screenshot.png          # 整页截图
+viewport.png            # 浏览器实际可视区域截图
+layout.json             # 视口、页面及弹窗/抽屉几何数据
 requests.json           # URL、方法、参数、请求体
 responses.json          # 状态码、耗时、响应体
 checks.json             # expected / actual / status
@@ -211,10 +220,12 @@ trace.zip               # Playwright 调试证据
 
 结果结论为：
 
-- `pass`：规则和模型复核均通过；
+- `pass`：已配置的确定性检查通过；若 `visualReview` 是 `optional` 且没有适配器，视觉结果仍为 `not_run`；
 - `fail`：确定性规则失败；
 - `blocked`：页面、API、数据或执行环境不可用；
-- `needs_review`：证据不足或模型发现语义问题。
+- `needs_review`：必需视觉审查未运行、视觉证据或规则项不完整，或模型认为需要人工判断。
+
+每个结果的 `quality.visualReview` 独立记录策略、状态、逐项规则结果和证据。运行汇总中的 `qualitySummary.visualReview` 汇总通过、失败、未运行、待复核和受阻数量。
 
 ## 运行时实现
 
@@ -225,7 +236,7 @@ trace.zip               # Playwright 调试证据
 - `ModelAdapter`：可选的外部模型复核适配器；
 - 指纹选择器：判断场景是否可以复用上次结果。
 
-默认不调用模型。需要语义复核时，由外部 Agent 或显式注入的 `ModelAdapter` 完成。
+默认不调用模型。需要视觉判断时，由外部 Agent 显式提供符合固定 rubric 的 `ModelAdapter`；包负责验证适配器是否覆盖全部规则和输出证据，不会把未运行的模型复核伪装成通过。
 
 ## 目录
 

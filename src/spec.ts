@@ -38,6 +38,12 @@ export function stableStringify(value: unknown): string {
 }
 
 async function readSchema(name: string): Promise<string> {
+  try {
+    const projectPackage = JSON.parse(await readFile(path.resolve(process.cwd(), 'package.json'), 'utf8')) as { name?: string };
+    if (projectPackage.name === '@zouxuyang/frontend-api-evidence-gate') {
+      return await readFile(path.resolve(process.cwd(), 'schemas', name), 'utf8');
+    }
+  } catch { /* Use the installed package's schema outside its source checkout. */ }
   try { return await readFile(new URL(`../schemas/${name}`, import.meta.url), 'utf8'); }
   catch { return await readFile(path.resolve(process.cwd(), 'schemas', name), 'utf8'); }
 }

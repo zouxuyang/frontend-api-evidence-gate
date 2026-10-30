@@ -23,7 +23,7 @@ export async function readReusableResult(file: string, scenarioHash: string) {
     const result = JSON.parse(await readFile(file, 'utf8'));
     if (result.status === 'passed' && result.decision === 'pass' && result.fingerprint?.scenarioHash === scenarioHash) {
       const evidence = result.evidence ?? {};
-      const paths = [evidence.screenshot, evidence.trace, evidence.checks, evidence.requests, evidence.responses, ...(evidence.screenshots ?? [])].filter(Boolean);
+      const paths = [evidence.screenshot, evidence.viewportScreenshot, evidence.layout, evidence.trace, evidence.checks, evidence.requests, evidence.responses, ...(evidence.screenshots ?? [])].filter(Boolean);
       for (const evidencePath of paths) await stat(path.isAbsolute(evidencePath) ? evidencePath : path.resolve(path.dirname(file), evidencePath));
       const resultStat = await stat(file);
       const maxAgeMs = 7 * 24 * 60 * 60 * 1000;

@@ -5,7 +5,8 @@ import Ajv2020 from 'ajv/dist/2020.js';
 import AxeBuilder from '@axe-core/playwright';
 import type { AcceptanceResult, AcceptanceSpec, BrowserTarget, CheckResult, RequestEvidence, ResponseEvidence, ScenarioSpec, StepResult } from './types.js';
 import { buildHashes, readReusableResult } from './fingerprint.js';
-import type { ModelAdapter } from './model.js';
+import { resolveVisualReview, VISUAL_REVIEW_RUBRIC, type ModelAdapter, type ModelReviewInput } from './model.js';
+import { collectLayoutMetrics, inspectLayout, type LayoutMetrics } from './layout.js';
 
 export interface RunOptions {
   spec: AcceptanceSpec;
@@ -32,7 +33,15 @@ export async function runAcceptance(options: RunOptions): Promise<AcceptanceResu
   const target = options.browserTarget ?? options.spec.browser ?? { mode: 'launch' };
   const pending: Array<{ scenario: ScenarioSpec; hashes: AcceptanceResult['fingerprint']; artifactDir: string }> = [];
   for (const scenario of options.spec.scenarios) {
-    const hashes = buildHashes(options.spec, options.normalizedSpec, scenario, { browser: target.browser ?? options.browser ?? 'chromium', mode: target.mode ?? 'launch', target: target.target, screenshotMode: options.screenshotMode ?? options.spec.quality?.screenshot });
+    const hashes = buildHashes(options.spec, options.normalizedSpec, scenario, {
+      browser: target.browser ?? options.browser ?? 'chromium',
+      mode: target.mode ?? 'launch',
+      target: target.target,
+      screenshotMode: options.screenshotMode ?? options.spec.quality?.screenshot,
+      visualReview: options.spec.quality?.visualReview ?? 'optional',
+      modelAttached: Boolean(options.model),
+      layoutEngine: 'visual-layout-v1',
+    });
     const artifactDir = path.join(options.outputDir, runId, scenario.id);
     const previous = options.reuse ? await readReusableResult(path.join(options.outputDir, 'latest', scenario.id, 'acceptance-result.json'), hashes.scenarioHash) : null;
     if (previous) results.push({ ...previous, runId, status: 'reused', reusedFrom: previous.runId });
@@ -120,6 +129,7 @@ async function runScenario(browser: Browser, options: RunOptions, scenario: Scen
   const responses: ResponseEvidence[] = [];
   const checks: CheckResult[] = [];
   const steps: StepResult[] = [];
+  const visualScreenshots: ModelReviewInput['screenshots'] = [];
   let page: Page | undefined;
   let tracingContext: BrowserContext | undefined;
   let detachNetwork: (() => void) | undefined;
@@ -134,29 +144,45 @@ async function runScenario(browser: Browser, options: RunOptions, scenario: Scen
       page = await selectPage(browser, target);
       tracingContext = page.context();
     }
+    if (scenario.viewport) await page.setViewportSize(scenario.viewport);
     const traceEnabled = options.spec.quality?.trace !== false;
     if (traceEnabled) await tracingContext.tracing.start({ screenshots: true, snapshots: true });
     detachNetwork = attachNetworkEvidence(page, options.spec, requests, responses, consoleMessages, options.spec.quality?.redactSensitiveData !== false, options.maxResponseBodyBytes ?? 1024 * 1024);
-    if (shouldCaptureEachStep(options)) await page.screenshot({ path: path.join(artifactDir, 'screenshots', '000-before.png'), fullPage: true });
+    if (shouldCaptureEachStep(options)) await captureStepScreenshots(page, artifactDir, 0, 'before', visualScreenshots);
     for (const rawStep of scenario.steps) {
       ensureActive(options.signal);
       const step = normalizeStep(rawStep, steps.length + 1);
       const beforeChecks = checks.length;
       try {
-        const explicitEvidence = await executeStep(page, step, scenario, options.spec, options.baseUrl ?? options.spec.project?.baseUrl ?? '', checks, requests, responses, () => captureStepScreenshot(page!, artifactDir, steps.length + 1), options.signal);
-        const screenshot = shouldCaptureEachStep(options) ? await captureStepScreenshot(page, artifactDir, steps.length + 1) : undefined;
-        steps.push({ stepId: step.id, action: step.action, status: checks.slice(beforeChecks).some((check) => check.status === 'failed') ? 'failed' : 'passed', evidenceRefs: [...explicitEvidence, ...(screenshot ? [screenshot] : [])] });
+        const capture = () => captureStepScreenshots(page!, artifactDir, steps.length + 1, step.id ?? `step-${steps.length + 1}`, visualScreenshots);
+        const explicitEvidence = await executeStep(page, step, scenario, options.spec, options.baseUrl ?? options.spec.project?.baseUrl ?? '', checks, requests, responses, capture, options.signal);
+        const screenshots = shouldCaptureEachStep(options) ? await capture() : [];
+        steps.push({ stepId: step.id, action: step.action, status: checks.slice(beforeChecks).some((check) => check.status === 'failed') ? 'failed' : 'passed', evidenceRefs: [...explicitEvidence, ...screenshots] });
       } catch (error) {
         const message = error instanceof Error ? error.message : String(error);
-        const screenshot = await captureStepScreenshot(page, artifactDir, steps.length + 1);
-        steps.push({ stepId: step.id, action: step.action, status: 'blocked', message, evidenceRefs: [screenshot] });
+        const screenshots = await captureStepScreenshots(page, artifactDir, steps.length + 1, step.id ?? `step-${steps.length + 1}`, visualScreenshots);
+        steps.push({ stepId: step.id, action: step.action, status: 'blocked', message, evidenceRefs: screenshots });
         throw error;
       }
     }
     if (options.spec.quality?.consoleErrors === 'fail' && consoleMessages.length > 0) checks.push({ id: `${scenario.id}.console`, type: 'console-error', status: 'failed', actual: consoleMessages });
-    if (options.spec.quality?.layoutOverflow === 'fail') {
-      const layout = await page.evaluate(() => ({ scrollWidth: document.documentElement.scrollWidth, clientWidth: document.documentElement.clientWidth, scrollHeight: document.documentElement.scrollHeight, clientHeight: document.documentElement.clientHeight }));
-      checks.push({ id: `${scenario.id}.layout`, type: 'layout-overflow', status: layout.scrollWidth <= layout.clientWidth ? 'passed' : 'failed', expected: { overflowX: false }, actual: layout });
+    const visualPolicy = options.spec.quality?.visualReview ?? 'optional';
+    let layoutMetrics: LayoutMetrics | undefined;
+    const layoutPath = path.join(artifactDir, 'layout.json');
+    if (options.spec.quality?.layoutOverflow === 'fail' || visualPolicy !== 'off') {
+      layoutMetrics = await collectLayoutMetrics(page);
+      await writeFile(layoutPath, JSON.stringify(layoutMetrics, null, 2));
+    }
+    if (options.spec.quality?.layoutOverflow === 'fail' && layoutMetrics) {
+      const layoutFindings = inspectLayout(layoutMetrics);
+      checks.push({
+        id: `${scenario.id}.layout`,
+        type: 'layout-overflow',
+        status: layoutFindings.length === 0 ? 'passed' : 'failed',
+        expected: { horizontalOverflow: false, overlaysInsideViewport: true, dialogFooterReachable: true, dialogBodyDoesNotOverlapFooter: true },
+        actual: { metrics: layoutMetrics, findings: layoutFindings },
+        evidenceRefs: [path.relative(artifactDir, layoutPath)],
+      });
     }
     if (options.spec.quality?.accessibility === 'fail') {
       const accessibility = await page.evaluate(() => ({ missingImageAlt: [...document.images].filter((image) => !image.hasAttribute('alt')).length, unlabeledInputs: [...document.querySelectorAll('input,select,textarea')].filter((element) => !element.getAttribute('aria-label') && !element.getAttribute('aria-labelledby') && !element.closest('label')).length, unnamedButtons: [...document.querySelectorAll('button')].filter((button) => !(button.textContent?.trim() || button.getAttribute('aria-label') || button.getAttribute('title'))).length }));
@@ -171,15 +197,63 @@ async function runScenario(browser: Browser, options: RunOptions, scenario: Scen
     }
     const screenshot = path.join(artifactDir, 'screenshot.png');
     await page.screenshot({ path: screenshot, fullPage: true });
+    const viewportScreenshot = path.join(artifactDir, 'viewport.png');
+    await page.screenshot({ path: viewportScreenshot });
+    const viewport = page.viewportSize() ?? { width: 1280, height: 720 };
+    visualScreenshots.push({ kind: 'full-page', path: screenshot, viewport });
+    visualScreenshots.push({ kind: 'viewport', path: viewportScreenshot, viewport });
     const tracePath = options.spec.quality?.trace === false ? undefined : path.join(artifactDir, 'trace.zip');
     if (tracePath) await tracingContext.tracing.stop({ path: tracePath }).catch(() => undefined);
-        const modelReview = options.model ? await options.model.review({ spec: options.spec, scenario, checks, requests, responses, screenshotPath: screenshot }) : undefined;
-    const decision = checks.some((check) => check.status === 'failed') ? 'fail' : modelReview?.status === 'failed' ? 'fail' : modelReview?.status === 'needs_review' ? 'needs_review' : 'pass';
+    const modelReview = options.model && visualPolicy !== 'off'
+      ? await options.model.review({
+          spec: options.spec,
+          scenario,
+          checks,
+          requests,
+          responses,
+          screenshotPath: viewportScreenshot,
+          screenshots: visualScreenshots,
+          layoutMetrics,
+          rubric: VISUAL_REVIEW_RUBRIC,
+        })
+      : undefined;
+    const visualDecision = resolveVisualReview(visualPolicy, modelReview);
+    if (visualPolicy === 'required' && !modelReview) {
+      checks.push({ id: `${scenario.id}.visual-review`, type: 'visual-review', status: 'blocked', message: '视觉审查设为必需，但没有提供 ModelAdapter。' });
+    } else if (visualPolicy === 'optional' && !modelReview) {
+      checks.push({ id: `${scenario.id}.visual-review`, type: 'visual-review', status: 'skipped', message: '未配置视觉审查 ModelAdapter；本次结果不包含视觉结论。' });
+    } else if (modelReview) {
+      checks.push({
+        id: `${scenario.id}.visual-review`,
+        type: 'visual-review',
+        status: visualDecision.status === 'passed' ? 'passed' : visualDecision.status === 'failed' ? 'failed' : 'blocked',
+        expected: { criteria: VISUAL_REVIEW_RUBRIC.map(({ id }) => id), status: 'passed' },
+        actual: { status: visualDecision.status, criteria: modelReview.criteria ?? [] },
+        message: visualDecision.status === 'failed' ? '视觉复核发现明确问题。' : visualDecision.status !== 'passed' ? '视觉复核未形成完整、可复核的通过结论。' : undefined,
+        evidenceRefs: modelReview.evidenceRefs,
+      });
+    }
+    const decision = checks.some((check) => check.status === 'failed') ? 'fail' : visualDecision.decision === 'needs_review' ? 'needs_review' : 'pass';
     const result: AcceptanceResult = {
       runId, taskId: options.spec.taskId, specId: options.spec.specId, specVersion: options.spec.specVersion, scenarioId: scenario.id,
-      status: decision === 'fail' ? 'failed' : 'passed', decision, fingerprint, reusedFrom: null,
-      evidence: { screenshot, screenshots: steps.flatMap((step) => step.evidenceRefs), trace: tracePath, console: path.join(artifactDir, 'console.json'), axe: axeReport ? path.join(artifactDir, 'axe.json') : undefined, checks: path.join(artifactDir, 'checks.json'), requests: path.join(artifactDir, 'requests.json'), responses: path.join(artifactDir, 'responses.json') },
-      requests, responses, checks, steps, findings: modelReview?.findings ?? [], ...(modelReview ? { aiReview: modelReview } : {})
+      status: decision === 'fail' ? 'failed' : decision === 'needs_review' ? 'blocked' : 'passed', decision, fingerprint, reusedFrom: null,
+      evidence: { screenshot, viewportScreenshot, screenshots: [...steps.flatMap((step) => step.evidenceRefs), ...visualScreenshots.map((item) => item.path)], trace: tracePath, console: path.join(artifactDir, 'console.json'), axe: axeReport ? path.join(artifactDir, 'axe.json') : undefined, layout: layoutMetrics ? layoutPath : undefined, checks: path.join(artifactDir, 'checks.json'), requests: path.join(artifactDir, 'requests.json'), responses: path.join(artifactDir, 'responses.json') },
+      requests,
+      responses,
+      checks,
+      steps,
+      findings: modelReview?.findings ?? [],
+      ...(modelReview ? { aiReview: modelReview } : {}),
+      quality: {
+        visualReview: {
+          policy: visualPolicy,
+          status: visualDecision.status,
+          confidence: modelReview?.confidence,
+          criteria: modelReview?.criteria,
+          findings: modelReview?.findings ?? [],
+          evidenceRefs: modelReview?.evidenceRefs ?? [],
+        },
+      },
     };
     await writeArtifacts(artifactDir, result);
     if (axeReport) await writeFile(path.join(artifactDir, 'axe.json'), JSON.stringify(axeReport, null, 2));
@@ -193,7 +267,12 @@ async function runScenario(browser: Browser, options: RunOptions, scenario: Scen
       runId, taskId: options.spec.taskId, specId: options.spec.specId, specVersion: options.spec.specVersion, scenarioId: scenario.id,
       status: 'blocked', decision: 'needs_review', fingerprint, reusedFrom: null,
       evidence: { screenshot: '', screenshots: steps.flatMap((step) => step.evidenceRefs), trace: tracePath, console: path.join(artifactDir, 'console.json'), checks: path.join(artifactDir, 'checks.json'), requests: path.join(artifactDir, 'requests.json'), responses: path.join(artifactDir, 'responses.json') },
-      requests, responses, checks: [...checks, runtimeCheck], steps, findings: []
+      requests,
+      responses,
+      checks: [...checks, runtimeCheck],
+      steps,
+      findings: [],
+      quality: { visualReview: { policy: options.spec.quality?.visualReview ?? 'optional', status: 'blocked', findings: [], evidenceRefs: [] } },
     };
     await writeArtifacts(artifactDir, result);
     await updateLatest(options.outputDir, scenario.id, artifactDir);
@@ -263,7 +342,7 @@ function normalizeStep(raw: Record<string, unknown>, index: number): ExecutableS
   return { ...raw, id: `step-${index}`, action: legacy ?? '' };
 }
 
-async function executeStep(page: Page, step: ExecutableStep, scenario: ScenarioSpec, spec: AcceptanceSpec, baseUrl: string, checks: CheckResult[], requests: RequestEvidence[], responses: ResponseEvidence[], capture: () => Promise<string>, signal?: AbortSignal): Promise<string[]> {
+async function executeStep(page: Page, step: ExecutableStep, scenario: ScenarioSpec, spec: AcceptanceSpec, baseUrl: string, checks: CheckResult[], requests: RequestEvidence[], responses: ResponseEvidence[], capture: () => Promise<string[]>, signal?: AbortSignal): Promise<string[]> {
   ensureActive(signal);
   const action = step.action;
   const rawTarget = step.target && typeof step.target === 'object' ? step.target as Record<string, unknown> : undefined;
@@ -285,7 +364,7 @@ async function executeStep(page: Page, step: ExecutableStep, scenario: ScenarioS
     else await sleepWithSignal(Number(step.timeoutMs ?? 250), signal);
     return [];
   }
-  if (action === 'screenshot') return [await capture()];
+  if (action === 'screenshot') return capture();
   if (action === 'assertVisible' || (step.assertVisible && typeof step.assertVisible === 'object')) { const expected = target ?? step.assertVisible as Record<string, unknown>; const wanted = typeof step.expected === 'boolean' ? step.expected : true; const actual = await waitForVisibility(page, expected, wanted, Number(step.timeoutMs ?? 5000)); checks.push({ id: `assertVisible-${checks.length + 1}`, type: 'visibility', status: actual === wanted ? 'passed' : 'failed', expected: wanted, actual }); return []; }
   if (action === 'assertText') { const actual = await uniqueLocator(page, target ?? {}, action).then((item) => item.innerText()); const expected = String(step.expected ?? step.text ?? ''); checks.push({ id: `assertText-${checks.length + 1}`, type: 'text', status: actual.includes(expected) ? 'passed' : 'failed', expected, actual }); return []; }
   if (action === 'assertValue') { const actual = await uniqueLocator(page, target ?? {}, action).then((item) => item.inputValue()); const expected = String(step.expected ?? ''); checks.push({ id: `assertValue-${checks.length + 1}`, type: 'value', status: actual === expected ? 'passed' : 'failed', expected, actual }); return []; }
@@ -304,7 +383,17 @@ function resolveComponentTarget(target: Record<string, unknown> | undefined, com
   return { ...item.locator, ...(target ?? {}) , component: undefined };
 }
 
-async function captureStepScreenshot(page: Page, artifactDir: string, index: number): Promise<string> { const relative = path.join('screenshots', `${String(index).padStart(3, '0')}-step.png`); await page.screenshot({ path: path.join(artifactDir, relative), fullPage: true }); return relative; }
+async function captureStepScreenshots(page: Page, artifactDir: string, index: number, stepId: string, evidence: ModelReviewInput['screenshots']): Promise<string[]> {
+  const prefix = path.join(artifactDir, 'screenshots', `${String(index).padStart(3, '0')}-${safeFileName(stepId)}`);
+  const viewport = page.viewportSize() ?? { width: 1280, height: 720 };
+  const viewportPath = `${prefix}-viewport.png`;
+  const fullPagePath = `${prefix}-full-page.png`;
+  await page.screenshot({ path: viewportPath });
+  await page.screenshot({ path: fullPagePath, fullPage: true });
+  evidence.push({ kind: 'step-viewport', path: viewportPath, stepId, viewport }, { kind: 'step-full-page', path: fullPagePath, stepId, viewport });
+  return [viewportPath, fullPagePath];
+}
+function safeFileName(value: string) { return value.replace(/[^a-zA-Z0-9._-]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 80) || 'step'; }
 function shouldCaptureEachStep(options: RunOptions) { return options.screenshotMode === 'each-step' || options.spec.quality?.screenshot === 'each-step'; }
 async function waitFor<T>(read: () => T | undefined, timeoutMs: number, signal?: AbortSignal): Promise<T | undefined> { const deadline = Date.now() + timeoutMs; while (Date.now() < deadline) { ensureActive(signal); const value = read(); if (value) return value; await new Promise((resolve) => setTimeout(resolve, 50)); } ensureActive(signal); return read(); }
 function ensureActive(signal?: AbortSignal) { if (signal?.aborted) throw signal.reason instanceof Error ? signal.reason : new Error('验收任务已取消'); }
@@ -422,9 +511,37 @@ function redactValue(value: unknown): unknown {
 }
 async function writeBlockedResult(options: RunOptions, scenario: ScenarioSpec, fingerprint: AcceptanceResult['fingerprint'], runId: string, artifactDir: string, error: unknown) {
   await mkdir(path.join(artifactDir, 'screenshots'), { recursive: true });
-  const result: AcceptanceResult = { runId, taskId: options.spec.taskId, specId: options.spec.specId, specVersion: options.spec.specVersion, scenarioId: scenario.id, status: 'blocked', decision: 'needs_review', fingerprint, reusedFrom: null, evidence: { screenshot: '', checks: path.join(artifactDir, 'checks.json'), requests: path.join(artifactDir, 'requests.json'), responses: path.join(artifactDir, 'responses.json') }, requests: [], responses: [], checks: [{ id: `${scenario.id}.runtime`, type: 'runtime', status: 'blocked', message: error instanceof Error ? error.message : String(error) }], findings: [] };
+  const result: AcceptanceResult = {
+    runId,
+    taskId: options.spec.taskId,
+    specId: options.spec.specId,
+    specVersion: options.spec.specVersion,
+    scenarioId: scenario.id,
+    status: 'blocked',
+    decision: 'needs_review',
+    fingerprint,
+    reusedFrom: null,
+    evidence: { screenshot: '', checks: path.join(artifactDir, 'checks.json'), requests: path.join(artifactDir, 'requests.json'), responses: path.join(artifactDir, 'responses.json') },
+    requests: [],
+    responses: [],
+    checks: [{ id: `${scenario.id}.runtime`, type: 'runtime', status: 'blocked', message: error instanceof Error ? error.message : String(error) }],
+    findings: [],
+    quality: { visualReview: { policy: options.spec.quality?.visualReview ?? 'optional', status: 'blocked', findings: [], evidenceRefs: [] } },
+  };
   await writeArtifacts(artifactDir, result);
   await updateLatest(options.outputDir, scenario.id, artifactDir);
   return result;
 }
-async function writeRunSummary(outputDir: string, runId: string, spec: AcceptanceSpec, results: AcceptanceResult[]) { await mkdir(path.join(outputDir, runId), { recursive: true }); await writeFile(path.join(outputDir, runId, 'run-summary.json'), JSON.stringify({ runId, taskId: spec.taskId, specId: spec.specId, selection: { total: results.length, run: results.filter((result) => result.status !== 'reused').length, reused: results.filter((result) => result.status === 'reused').length, items: results.map((result) => ({ scenarioId: result.scenarioId, action: result.status === 'reused' ? 'reuse' : 'run', reusedFrom: result.reusedFrom })) }, results }, null, 2)); }
+async function writeRunSummary(outputDir: string, runId: string, spec: AcceptanceSpec, results: AcceptanceResult[]) {
+  await mkdir(path.join(outputDir, runId), { recursive: true });
+  await writeFile(path.join(outputDir, runId, 'run-summary.json'), JSON.stringify({
+    runId,
+    taskId: spec.taskId,
+    specId: spec.specId,
+    selection: { total: results.length, run: results.filter((result) => result.status !== 'reused').length, reused: results.filter((result) => result.status === 'reused').length, items: results.map((result) => ({ scenarioId: result.scenarioId, action: result.status === 'reused' ? 'reuse' : 'run', reusedFrom: result.reusedFrom })) },
+    qualitySummary: {
+      visualReview: Object.fromEntries(['passed', 'failed', 'needs_review', 'not_run', 'blocked'].map((status) => [status, results.filter((result) => result.quality?.visualReview.status === status).length])),
+    },
+    results,
+  }, null, 2));
+}
